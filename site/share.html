@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f9f9f7">
+  <meta name="color-scheme" content="light">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/share-receiver.css">
+  <script defer src="/share-receiver.js"></script>
+  <title>Link saved · Repository</title>
+</head>
+<body class="share-page">
+  <div class="capture-shell">
+    <header class="capture-header">
+      <span class="capture-wordmark">Repository<span class="period">.</span></span>
+      <span class="capture-overline">SAVE A LINK</span>
+    </header>
+    <main class="capture-main">
+      <section class="capture-status" role="status" aria-live="polite">
+        <span class="capture-check" aria-hidden="true">✓</span>
+        <div class="capture-status-text">
+          <h1 id="capture-heading">Saving link…</h1>
+          <p id="capture-status-detail">Checking the link details</p>
+        </div>
+      </section>
+      <section id="capture-content" class="capture-content" aria-label="Saved link details" hidden>
+        <label class="capture-field" for="capture-title"><span>Title</span>
+          <input id="capture-title" type="text" maxlength="250" autocomplete="off" aria-label="Saved link title">
+        </label>
+        <label class="capture-field" for="capture-description"><span>Description</span>
+          <textarea id="capture-description" rows="2" maxlength="1200" placeholder="Description not available. Add one if you like."></textarea>
+        </label>
+        <div class="capture-field"><span>Link</span>
+          <div class="capture-link-row"><input id="capture-url" type="url" readonly aria-label="Original link"/><a id="capture-open-link" href="#" rel="noopener noreferrer" target="_blank" aria-label="Open original link">↗</a></div>
+        </div>
+        <label class="capture-field" for="capture-category"><span>Category</span><select id="capture-category"></select></label>
+        <label class="capture-field" for="capture-note"><span>Your note <small>(optional)</small></span>
+          <textarea id="capture-note" rows="2" maxlength="1200" placeholder="Add anything you want to remember…"></textarea>
+        </label>
+      </section>
+      <section id="capture-error" class="capture-error" hidden>
+        <p id="capture-error-message">No link was received. You can try sharing again.</p>
+        <a href="/">Open Repository</a>
+      </section>
+    </main>
+    <footer class="capture-footer">
+      <button id="capture-done" type="button" class="capture-done" disabled>Done · Return</button>
+      <p id="capture-exit-hint" class="capture-hint">If this screen stays open, use your phone’s Back button.</p>
+    </footer>
+  </div>
+</body>
+</html>

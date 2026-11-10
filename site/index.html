@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f9f9f7">
+  <meta name="description" content="A minimal personal repository for links you share from around the web.">
+  <meta name="color-scheme" content="light">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/styles.css">
+  <title>Repository</title>
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <div class="page-shell">
+<header class="site-header">
+      <button id="home-button" class="wordmark" type="button" aria-label="Go to repository homepage">Repository<span class="period">.</span></button>
+      <div class="header-right"><span class="local-label">PERSONAL SPACE</span><button type="button" id="add-button" class="button primary">+ Save link</button></div>
+    </header>
+    <main>
+      <section class="hero" id="hero">
+        <div class="eyebrow" id="eyebrow">YOUR COLLECTION</div>
+        <div class="hero-heading-row">
+          <div><h1 id="main-title">Everything, in its place.</h1><p class="subtitle" id="subtitle">A quiet home for everything worth keeping.</p></div>
+          <button id="back-button" type="button" class="back-button" hidden>← All categories</button>
+        </div>
+        <label class="search-box" for="search-input">
+          <span class="search-prefix">SEARCH</span>
+          <input id="search-input" type="search" placeholder="Find something you've saved..." autocomplete="off" spellcheck="false">
+          <span class="search-shortcut" aria-hidden="true">/</span>
+        </label>
+      </section>
+      <section id="categories-section" aria-label="Categories">
+        <div class="section-heading"><h2>Categories</h2><button id="new-category-button" class="text-action" type="button">+ New category</button></div>
+        <div id="category-grid" class="category-grid"></div>
+      </section>
+      <section id="entries-section" hidden aria-label="Saved links">
+        <div class="section-heading"><h2 id="list-heading">Saved links</h2><span id="result-count" class="entry-count"></span></div>
+        <div id="entries-list" class="entries-list"></div>
+        <div id="empty-message" class="empty-message" hidden></div>
+      </section>
+    </main>
+    <footer class="footer">
+      <span>Prototype v1.5 · Saved locally on this device</span>
+      <div class="footer-actions"><button type="button" id="show-share-diagnostics">Share diagnostics</button><button type="button" id="export-button">Export backup</button><label for="import-input" class="import-label">Import backup</label><input type="file" id="import-input" accept="application/json,.json" hidden></div>
+    </footer>
+  </div>
+  <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
+
+  <dialog id="entry-dialog" class="editor-dialog">
+    <form method="dialog" id="entry-form">
+      <div class="dialog-top"><h2 id="dialog-heading">Save a link</h2><button class="close-button" type="button" id="close-entry-dialog" aria-label="Close">×</button></div>
+      <label for="entry-url">Link <span class="required">*</span></label>
+      <input id="entry-url" name="url" type="url" inputmode="url" required placeholder="https://..." autocomplete="off">
+      <label for="entry-title">Title</label>
+      <input id="entry-title" name="title" placeholder="Optional: give it a title" maxlength="250">
+      <label for="entry-description">Description</label>
+      <textarea id="entry-description" name="description" rows="3" placeholder="Optional description" maxlength="1200"></textarea>
+      <label for="entry-note">Your note (optional)</label>
+      <textarea id="entry-note" name="note" rows="2" maxlength="1200" placeholder="Anything you want to remember"></textarea>
+      <label for="entry-category">Category</label>
+      <select id="entry-category" name="category"></select>
+      <div class="dialog-actions"><button type="button" id="delete-entry" class="danger-link" hidden>Delete</button><button type="button" id="retry-details" class="text-action" hidden>Refresh details</button><button class="button primary" type="submit" id="save-entry">Save link</button></div>
+    </form>
+  </dialog>
+  <dialog id="category-dialog" class="editor-dialog small-dialog">
+    <form id="category-form" method="dialog">
+      <div class="dialog-top"><h2>New category</h2><button type="button" id="close-category-dialog" class="close-button" aria-label="Close">×</button></div>
+      <label for="category-name">Category name</label><input id="category-name" type="text" maxlength="45" required placeholder="e.g. Design">
+      <div class="dialog-actions"><button class="button primary" type="submit">Create category</button></div>
+    </form>
+  </dialog>
+  <dialog id="share-diagnostics-dialog" class="editor-dialog">
+    <div class="dialog-top"><h2>Share diagnostics</h2><button type="button" id="close-share-diagnostics" class="close-button" aria-label="Close">×</button></div>
+    <p>Last 5 share attempts on this device. This information is not sent anywhere.</p>
+    <div id="share-diagnostics-list" class="share-diagnostics-list"></div>
+    <div class="dialog-actions"><button class="button primary" type="button" id="test-share-button">Test saving a sample link</button></div>
+  </dialog>
+</body>
+</html>

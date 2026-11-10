@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Repository install check</title>
+<style>body{background:#fafaf8;color:#262623;font:16px system-ui,sans-serif;max-width:700px;margin:40px auto;padding:20px;line-height:1.6}h1{font-size:26px}li{padding:9px 0;border-bottom:1px solid #ddd}small{color:#666}a{color:inherit}</style></head>
+<body><a href="/">← Repository</a><h1>Installation check</h1><p>This checks whether the essential installation files are reachable. It does not guarantee that Android will approve installation.</p><ul id="results"><li>Checking…</li></ul><script>
+(async()=>{
+ const ul=document.getElementById('results');ul.textContent='';
+ const add=(test,ok,details)=>{const li=document.createElement('li');li.textContent=(ok?'✓ ':'✕ ')+test+(details?' — '+details:'');ul.append(li)};
+ add('Secure HTTPS origin',location.protocol==='https:',location.protocol);
+ let m;
+ try {const r=await fetch('/manifest.webmanifest',{cache:'no-store'});m=await r.json();add('App manifest',r.ok&&!!m.name&&!!m.share_target,r.status+' · '+(r.headers.get('content-type')||'unknown content type'));}
+ catch(e){add('App manifest',false,String(e))}
+ if(m){add('App identity and home screen mode',!!m.id&&m.display==='standalone','id: '+(m.id||'missing'));
+ for(const i of (m.icons||[])){try{const r=await fetch(i.src,{cache:'no-store'});add(i.sizes+' icon',r.ok,r.status)}catch(e){add(i.sizes+' icon',false,String(e))}}
+ }
+ if('serviceWorker' in navigator){try{const reg=await navigator.serviceWorker.register('/sw.js');add('Service worker',!!reg,'registered')}catch(e){add('Service worker',false,String(e))}}
+ else add('Service worker',false,'not supported');
+ add('Already running as installed app',matchMedia('(display-mode: standalone)').matches,matchMedia('(display-mode: standalone)').matches?'Yes':'Not currently');
+})();
+</script></body></html>
