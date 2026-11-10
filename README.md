@@ -4,15 +4,16 @@ Minimal installed web app for saving shared links from Android. Migrated from Re
 
 ## Deployment (GitHub → Cloudflare Pages)
 
-1. Create a **new empty GitHub repository**, preferably private, such as `my-repository-pwa`.
-2. Upload **the contents of this project's root** to the GitHub repository. `site/` and `functions/` must be alongside each other at the root.
-3. In Cloudflare, navigate to **Workers & Pages → Create application → Pages → Connect to Git** (or Pages → Import existing Git repository if displayed). Authorize GitHub, select your new repository, and choose the production branch `main`.
-4. Build configuration: **Framework: None**, **Build command: `exit 0`**, **Build output directory: `site`**. Do not specify `functions` as the build directory.
-5. Deploy. Confirm the deployed `https://<project>.pages.dev/` page loads. Test `/check.html` and `/api/metadata?url=https%3A%2F%2Fwww.wikipedia.org%2F` (the latter may vary by source access).
-6. Export all saved links on your installed Netlify Repository first. Install the new Cloudflare URL as a separate PWA from Chrome and import your backup. The new domain has separate local storage.
-7. Test Android Share → Repository and open/edit saved links **before** considering removal of the Netlify site.
+1. Source code is already committed to **`houssamovic/-my-repository-pwa`** on the `main` branch. Do not upload another ZIP.
+2. In Cloudflare, navigate to **Workers & Pages → Create application → Pages → Connect to Git** (or Pages → Import existing Git repository if displayed). Authorize GitHub, select your new repository, and choose the production branch `main`.
+3. Build configuration: **Framework: None**, **Build command: `exit 0`**, **Build output directory: `site`**. Do not specify `functions` as the build directory.
+4. Deploy. Confirm the deployed `https://<project>.pages.dev/` page loads. Test `/check.html` and `/api/metadata?url=https%3A%2F%2Fwww.wikipedia.org%2F` (the latter may vary by source access).
+5. Export all saved links on your installed Netlify Repository first. Install the new Cloudflare URL as a separate PWA from Chrome and import your backup. The new domain has separate local storage.
+6. Test Android Share → Repository and open/edit saved links **before** considering removal of the Netlify site.
 
 **Important:** Choose **Connect to Git**, not **Direct Upload**. Cloudflare currently does not allow upgrading a Direct Upload Pages project to Git integration later.
+
+**Current migration status:** GitHub source import complete. Cloudflare Pages account connection and live deployment remain to be performed. Existing Netlify site is not changed.
 
 ## Architecture
 
