@@ -117,7 +117,7 @@ async function youtubeTitle(raw, signal) {
   if(!watch) return '';
   const api=new URL('https://www.youtube.com/oembed');
   api.searchParams.set('url',watch);api.searchParams.set('format','json');
-  const response=await fetch(api.href,{signal,redirect:'error',headers:{'Accept':'application/json'}});
+  const response=await fetch(api.href,{signal,redirect:'manual',headers:{'Accept':'application/json'}});
   if(!response.ok || !/application\/json/i.test(response.headers.get('content-type') || '')) return '';
   if(Number(response.headers.get('content-length') || 0) > 15000) return '';
   const payload=await response.text();
@@ -173,7 +173,7 @@ export async function youtubeSnippet(raw, env, signal, diagnostics) {
   api.searchParams.set('id',id);
   api.searchParams.set('key',key);
   const response=await fetch(api.href,{
-    signal,redirect:'error',headers:{Accept:'application/json'}
+    signal,redirect:'manual',headers:{Accept:'application/json'}
   });
   if(!response.ok) {
     let errorBody='';
