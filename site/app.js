@@ -9,6 +9,8 @@
   const META_ENDPOINT = '/api/metadata';
   const AI_ENDPOINT = '/api/classify';
   const aiAttemptedInSession = new Set();
+  const MAX_AI_ATTEMPTS_PER_SESSION = 12;
+  let aiRequestsInFlight = 0;
   const inFlightMetadata = new Set();
   const DEFAULT_CATEGORIES = ['DIY', 'Food & Recipes', 'Travel', 'Technology', 'Reading', 'Unsorted'];
   const MAX_ITEMS = 20000;
@@ -298,6 +300,7 @@
       }
       saveData(); render();
       if(found.category==='Unsorted'&&!found.manualCategory)void classifyUnsorted(found.id);
+      resumeMetadata();
     } catch {
       // A transient network failure is retried on the next online launch.
       if ((item.metaAttempts || 0) >= 3) { item.metaStatus = 'unavailable'; saveData(); render(); }
@@ -316,6 +319,7 @@
     const usefulDesc=description.length>=15 && !/^(?:shared link|saved link|details unavailable|description not provided|youtube ·|instagram ·)/i.test(description);
     if(!usefulTitle&&!usefulDesc) return;
     aiAttemptedInSession.add(id);
+    aiRequestsInFlight++;
     const controller=new AbortController();
     const timer=setTimeout(()=>controller.abort(),12000);
     try {
@@ -332,15 +336,28 @@
       if(!categories.includes(category))categories.splice(categories.length-1,0,category);
       current.category=category;current.aiChecked=true;saveData();render();
     } catch { /* best effort: retry next time user opens Repository */ }
-    finally {clearTimeout(timer);}
+    finally {clearTimeout(timer);aiRequestsInFlight--;queueUnsorted();}
   }
 
+  function canClassify(item) {
+    if(!item || item.category!=='Unsorted'||item.manualCategory||item.aiChecked)return false;
+    const title=String(item.title||'').trim(),description=String(item.description||'').trim();
+    const titleUseful=title.length>=8&&!/^(?:youtube|youtube (?:video|short)|instagram (?:post|reel)|x post|facebook post|saved link|link|youtu\.be|www\.youtube\.com)$/i.test(title);
+    const descUseful=description.length>=15&&!/^(?:shared link|saved link|details unavailable|description not provided|youtube ·|instagram ·)/i.test(description);
+    return titleUseful||descUseful;
+  }
+  function queueUnsorted() {
+    if(!navigator.onLine) return;
+    const remaining=Math.min(2-aiRequestsInFlight,MAX_AI_ATTEMPTS_PER_SESSION-aiAttemptedInSession.size);
+    if(remaining<=0)return;
+    items.filter(e=>canClassify(e)&&!aiAttemptedInSession.has(e.id))
+      .slice(0,remaining).forEach(e=>{void classifyUnsorted(e.id);});
+  }
   function resumeMetadata() {
     if (!navigator.onLine) return;
-    items.filter(e => e.metaStatus === 'pending' && (e.metaAttempts || 0) < 3)
+    items.filter(e => e.metaStatus === 'pending' && (e.metaAttempts || 0) < 3 && !inFlightMetadata.has(e.id))
       .slice(0,3).forEach(e => { void enrichItem(e.id); });
-    items.filter(e=>e.category==='Unsorted'&&!e.manualCategory&&!e.aiChecked)
-      .slice(0,3).forEach(e=>{void classifyUnsorted(e.id);});
+    queueUnsorted();
   }
   function recordShare(params, status, detail) {
     // Store diagnostic metadata locally only. Do not persist shared text or full URLs.
