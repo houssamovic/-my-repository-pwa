@@ -1,5 +1,5 @@
-const CACHE = 'repository-shell-v1-12-date-filters';
-const SHELL = ['./', './index.html', './share.html', './share-receiver.css', './share-receiver.js', './styles.css', './classifier.js', './cloud-vault.js', './date-filter.js', './app.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './favicon.ico'];
+const CACHE = 'repository-shell-v1-13-projects';
+const SHELL = ['./', './index.html', './share.html', './share-receiver.css', './share-receiver.js', './styles.css', './classifier.js', './cloud-vault.js', './date-filter.js', './projects.js', './app.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './favicon.ico'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });
