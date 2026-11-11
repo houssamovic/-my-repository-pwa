@@ -28,6 +28,29 @@ When the **AI** binding is absent, no AI inference happens and classification fa
 
 **Testing:** run node --test tests/*.test.mjs. Tests cover label validation and safe fallback but actual Cloudflare Workers AI output still requires live verification.
 
+## Social video enrichment (v1.9)
+
+Repository continues to save **the URL immediately**, even when a platform does not expose content to external services. It does **not** download videos, bypass login walls, access private posts, or claim to understand footage that has not been supplied.
+
+### Better YouTube and YouTube Shorts titles/descriptions (optional)
+
+You can provide an API key for the official **YouTube Data API v3**. This supplies the publisher's publicly available video title and description, often improving AI categorization compared with HTML previews and oEmbed.
+
+1. Google Cloud Console: select/create a project; enable **YouTube Data API v3** from **APIs & Services → Library**.
+2. Under **APIs & Services → Credentials**, create an API key. Restrict it to the **YouTube Data API v3** service. Keep it confidential, and review quota usage.
+3. Cloudflare → **Workers & Pages → my-repository-pwa (Pages) → Settings → Variables and Secrets → Add**. Select **Production**, use the name **YOUTUBE_API_KEY**, paste the key, and choose **Encrypt**. Save and redeploy production after adding the secret.
+4. In Repository, share a *new* public YouTube Short. For previously saved videos in **Unsorted**, use **Organize now** to re-fetch up to five previously opaque video links per click, or **Edit details → Refresh details** for any single link.
+
+The key is only sent from the Cloudflare Pages Function to Google's API; it is **never embedded in the Android PWA or GitHub**. An error, inaccessible video, missing key, or exhausted quota falls back to public HTML metadata and YouTube oEmbed (title only). Successful YouTube API metadata is cached for six hours when Cloudflare's Cache API is available. Default daily API quotas apply. The public /api/metadata endpoint should be protected with Cloudflare rate limits before inviting many users.
+
+### Instagram Reels and other inaccessible social videos
+
+Instagram and Facebook's official oEmbed offering is intended for displaying embeds, **not extracting and storing captions or analyzing videos for unrelated purposes**. There is no general, dependable URL-only way to infer the visual/audio subject of any Reel.
+
+Repository therefore captures any meaningful title or caption already included in Android's text Share payload. When a video lacks a description, the save screen offers a short optional **Description** clue, such as "Building a raised planter from recycled boards." Typing or editing this clue triggers fresh categorization without changing a manually selected category. The main editor now also preserves automatic-category eligibility when modifying descriptions. If there is no meaningful title/caption or user clue, Repository leaves the item in **Unsorted** rather than fabricating a description.
+
+This remains **content classification from supplied text**, not audio transcription or automatic video watching. No API key or cloud login is needed to use Repository's existing local-first saving.
+
 ## Current scope
 
 - Android installed PWA appears in Share menu. Share URLs, optionally edit title, description, category or note, and return with Android Back.
