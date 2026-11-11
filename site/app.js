@@ -8,6 +8,7 @@
   let cloudTimer;
   const META_ENDPOINT = '/api/metadata';
   const AI_ENDPOINT = '/api/classify';
+  const dates = globalThis.RepositoryDates;
   const aiAttemptedInSession = new Set();
   const MAX_AI_ATTEMPTS_PER_SESSION = 12;
   let aiRequestsInFlight = 0;
@@ -21,6 +22,9 @@
     home: $('home-button'), add: $('add-button'), back: $('back-button'),
     title: $('main-title'), subtitle: $('subtitle'), eyebrow: $('eyebrow'),
     search: $('search-input'), categories: $('categories-section'), grid: $('category-grid'),
+    dateMode: $('saved-date-mode'), dateExact: $('saved-date-exact'), dateOn: $('saved-date-on'),
+    dateRange: $('saved-date-range'), dateFrom: $('saved-date-from'), dateTo: $('saved-date-to'),
+    dateClear: $('saved-date-clear'),
     entries: $('entries-section'), list: $('entries-list'), listHeading: $('list-heading'),
     resultCount: $('result-count'), empty: $('empty-message'),
     organizeButton: $('organize-unsorted-button'), organizeStatus: $('organize-status'),
@@ -57,6 +61,7 @@
     }
   }
   let currentCategory = null;
+  let savedDateFilter = {mode:'all',day:'',start:'',end:''};
   let editedId = null;
   let categorySelectedByUser = false;
   let toastTimer = null;
@@ -199,7 +204,7 @@
     const titleCell=tag('div',{className:'entry-cell'});
     // The title is a real link, not an edit button. Keep the PWA in place by opening externally.
     const title=tag('a',{className:'entry-title',href:item.url,target:'_blank',rel:'noopener noreferrer',title:'Open original source'},item.title);
-    titleCell.append(title);
+    titleCell.append(title,tag('div',{className:'entry-saved-date'},dates.label(item.created)));
     const descCell=tag('div',{className:'entry-cell entry-description'});
     descCell.append(tag('span',{className:'entry-kind'},sourceKind(item.url)),document.createTextNode(item.description));
     if (item.note) descCell.append(tag('div',{className:'entry-personal-note'},`Note: ${item.note}`));
@@ -219,7 +224,10 @@
     if (!results.length) {
       ui.list.hidden=true;
       ui.empty.hidden=false;
-      ui.empty.textContent = currentCategory ? 'Nothing here yet. Share a link or use “Save link” to add the first item.' : 'No saved links match your search.';
+      ui.empty.textContent = savedDateFilter.mode==='range' && !savedDateFilter.start && !savedDateFilter.end
+        ? 'Choose a start or end date to filter your saved links.'
+        : savedDateFilter.mode!=='all' ? 'No links saved in this date period match your search and category.'
+        : currentCategory ? 'Nothing here yet. Share a link or use “Save link” to add the first item.' : 'No saved links match your search.';
       return;
     }
     ui.list.hidden=false;
@@ -248,6 +256,8 @@
   }
   function render() {
     const query=ui.search.value.trim().toLowerCase();
+    const dateActive=savedDateFilter.mode!=='all';
+    const selectedItems=items.filter(e=>matches(e,query)&&dates.matches(e,savedDateFilter));
     ui.organizeButton.hidden=currentCategory!=='Unsorted';
     ui.organizeStatus.hidden=currentCategory!=='Unsorted';
     ui.refreshDescriptionsButton.hidden=!currentCategory||pendingYouTubeDescriptions(currentCategory).length===0;
@@ -258,14 +268,14 @@
       ui.search.placeholder=`Search within ${currentCategory}...`;
       ui.back.hidden=false; ui.categories.hidden=true; ui.entries.hidden=false;
       ui.listHeading.textContent='All saved links';
-      renderEntries(items.filter(e=>e.category===currentCategory && matches(e,query)));
-    } else if (query) {
+      renderEntries(selectedItems.filter(e=>e.category===currentCategory));
+    } else if (query || dateActive) {
       ui.eyebrow.textContent='YOUR COLLECTION'; ui.title.textContent='Everything, in its place.';
       ui.subtitle.textContent='A quiet home for everything worth keeping.';
       ui.search.placeholder="Find something you've saved...";
       ui.back.hidden=true; ui.categories.hidden=true; ui.entries.hidden=false;
-      ui.listHeading.textContent='Search results';
-      renderEntries(items.filter(e=>matches(e,query)));
+      ui.listHeading.textContent=query?'Search results':'Saved links by date';
+      renderEntries(selectedItems);
     } else {
       ui.eyebrow.textContent='YOUR COLLECTION'; ui.title.textContent='Everything, in its place.';
       ui.subtitle.textContent='A quiet home for everything worth keeping.';
@@ -274,6 +284,34 @@
       renderCategories();
     }
   }
+  function updateDateFields() {
+    ui.dateExact.hidden=savedDateFilter.mode!=='day';
+    ui.dateRange.hidden=savedDateFilter.mode!=='range';
+    ui.dateClear.hidden=savedDateFilter.mode==='all';
+  }
+  ui.dateMode.addEventListener('change',()=>{
+    savedDateFilter.mode=ui.dateMode.value;
+    if(savedDateFilter.mode==='day' && !savedDateFilter.day) {
+      savedDateFilter.day=dates.localDay(new Date());
+      ui.dateOn.value=savedDateFilter.day;
+    }
+    updateDateFields();render();
+  });
+  ui.dateOn.addEventListener('change',()=>{
+    savedDateFilter.day=ui.dateOn.value;render();
+  });
+  ui.dateFrom.addEventListener('change',()=>{
+    savedDateFilter.start=ui.dateFrom.value;render();
+  });
+  ui.dateTo.addEventListener('change',()=>{
+    savedDateFilter.end=ui.dateTo.value;render();
+  });
+  ui.dateClear.addEventListener('click',()=>{
+    savedDateFilter={mode:'all',day:'',start:'',end:''};
+    ui.dateMode.value='all';ui.dateOn.value='';ui.dateFrom.value='';ui.dateTo.value='';
+    updateDateFields();render();
+  });
+  updateDateFields();
   function matches(e,q) { return !q || [e.title,e.description,e.url,e.category,e.note||''].join(' ').toLowerCase().includes(q); }
   function navigate(category=null) { currentCategory=category;ui.search.value='';ui.refreshDescriptionsStatus.hidden=true;ui.refreshDescriptionsStatus.textContent='';render();window.scrollTo({top:0,behavior:'instant'}); }
   function populateCategorySelect(selected='Auto') {
@@ -671,7 +709,7 @@
       const data=JSON.parse(await file.text());
       if(data.version!==1 || !Array.isArray(data.items) || !Array.isArray(data.categories) || data.items.length>MAX_ITEMS) throw Error('Format');
       const safeCategories=[...new Set([...DEFAULT_CATEGORIES,...data.categories.filter(c=>typeof c==='string'&&c.length>0&&c.length<=45)])];
-      const safeItems=data.items.filter(e=>e && cleanUrl(e.url) && typeof e.title==='string' && typeof e.description==='string' && typeof e.category==='string').map(e=>({id:String(e.id||crypto.randomUUID()),url:cleanUrl(e.url),title:e.title.slice(0,250),description:e.description.slice(0,1200),note:String(e.note||'').slice(0,1200),category:safeCategories.includes(e.category)?e.category:'Unsorted',created:e.created||new Date().toISOString()}));
+      const safeItems=data.items.filter(e=>e && cleanUrl(e.url) && typeof e.title==='string' && typeof e.description==='string' && typeof e.category==='string').map(e=>({id:String(e.id||crypto.randomUUID()),url:cleanUrl(e.url),title:e.title.slice(0,250),description:e.description.slice(0,1200),note:String(e.note||'').slice(0,1200),category:safeCategories.includes(e.category)?e.category:'Unsorted',created:typeof e.created==='string' && Number.isFinite(Date.parse(e.created)) ? e.created : null}));
       if(!confirm(`Import ${safeItems.length} links? This replaces the current repository on this device.`)) return;
       const oldItems=items,oldCategories=categories;
       items=safeItems;categories=safeCategories;
