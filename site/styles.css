@@ -111,3 +111,25 @@ dialog{border:none;border-radius:13px;background:#fff;box-shadow:0 24px 85px #1c
 
 /* Allow the editor to scroll safely when the keyboard opens on Android. */
 .editor-dialog{max-height:calc(100dvh - 28px);overflow-y:auto;overscroll-behavior:contain}
+
+
+/* v1.14: rating filter pairs with saved-date filtering, without another toolbar. */
+.saved-filters{display:flex;align-items:flex-start;flex-wrap:wrap;gap:10px 22px;margin-top:15px}
+.saved-filters .saved-date-filter{margin-top:0}
+.saved-rating-filter{display:flex;align-items:center;flex-wrap:wrap;gap:9px 12px;color:#777e75;font-size:12px;min-height:38px}
+.saved-rating-filter>label{font-weight:600;letter-spacing:.2px}
+.saved-rating-filter select{border:1px solid #e1e3de;border-radius:7px;background:#fff;color:#3b4039;padding:9px 10px;min-height:38px;font-size:12px;max-width:100%;color-scheme:light}
+.saved-rating-filter>select{min-width:131px}
+.rating-filter-fields{display:flex;align-items:center;flex-wrap:wrap;gap:7px 9px}
+.rating-filter-fields[hidden],.saved-rating-filter [hidden]{display:none!important}
+.rating-filter-fields select{min-width:72px}
+.rating-filter-fields select[aria-invalid="true"]{border-color:#a46a61}
+.rating-filter-error{font-size:11px;color:#a35043;flex-basis:100%}
+@media(max-width:750px){
+  .saved-filters{flex-direction:column;gap:10px;margin-top:12px}
+  .saved-rating-filter{gap:8px 10px}
+  .saved-rating-filter select{min-height:37px;padding:8px}
+}
+@media(max-width:390px){
+  .saved-rating-filter .rating-filter-fields{flex-basis:100%}
+}
