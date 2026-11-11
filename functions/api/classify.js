@@ -19,7 +19,7 @@ function json(body,status=200) {
 }
 function clean(s,max) {return String(s||'').replace(/[\x00-\x1f\x7f]/g,' ').replace(/\s+/g,' ').trim().slice(0,max);}
 function useful(s) {
-  return s.length>=7 && !/^(?:youtube|youtube video|youtube short|instagram|instagram reel|instagram post|x post|facebook post|link|saved link|details unavailable from source|description not provided by source|shared link \(content not analyzed\))$/i.test(s);
+  return s.length>=7 && !/^(?:youtube|youtube video|youtube short|instagram|instagram reel|instagram post|x post|facebook post|link|youtube.com|www.youtube.com|m.youtube.com|youtu.be|instagram.com|www.instagram.com|x.com|twitter.com|saved link|details unavailable from source|description not provided by source|shared link \(content not analyzed\))$/i.test(s);
 }
 function choices(existing) {
   const categories=[...BASE];
