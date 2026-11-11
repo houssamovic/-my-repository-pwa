@@ -14,6 +14,27 @@
     if(value===null||value===undefined||value==='')return null;
     const n=Number(value);return Number.isInteger(n)&&n>=1&&n<=10?n:null;
   }
+  /** Filter personal 1–10 importance scores; older and unrated links stay distinguishable. */
+  function ratingMatches(value,filter={mode:'any'}) {
+    const mode=filter?.mode||'any';
+    if(mode==='any')return true;
+    const score=importance(value);
+    if(mode==='unrated')return score===null;
+    if(score===null)return false;
+    if(mode==='rated')return true;
+    if(mode==='high')return score>=8&&score<=10;
+    if(mode==='mid')return score>=5&&score<=7;
+    if(mode==='low')return score>=1&&score<=4;
+    if(mode==='exact') {
+      const chosen=importance(filter?.exact);
+      return chosen!==null&&score===chosen;
+    }
+    if(mode==='range') {
+      const minimum=importance(filter?.min),maximum=importance(filter?.max);
+      return minimum!==null&&maximum!==null&&minimum<=maximum&&score>=minimum&&score<=maximum;
+    }
+    return false;
+  }
   function ids(value,validItemIds) {
     if(!Array.isArray(value))return [];
     return [...new Set(value.filter(x=>typeof x==='string'&&x.length<=120&&validItemIds.has(x)))].slice(0,MAX_LINKS_PER_PROJECT);
@@ -74,5 +95,5 @@
       'END:VEVENT','END:VCALENDAR',''
     ].join('\r\n');
   }
-  root.RepositoryProjects=Object.freeze({MAX_PROJECTS,NAME_LIMIT,PURPOSE_LIMIT,validDate,importance,sanitize,safeBrief,calendar});
+  root.RepositoryProjects=Object.freeze({MAX_PROJECTS,NAME_LIMIT,PURPOSE_LIMIT,validDate,importance,ratingMatches,sanitize,safeBrief,calendar});
 })(typeof globalThis==='undefined'?self:globalThis);
