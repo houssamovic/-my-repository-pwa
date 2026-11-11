@@ -38,7 +38,7 @@ test('local, JSON and encrypted cloud snapshots include projects',()=>{
   assert.match(share,/version:1,exported:new Date\(\)\.toISOString\(\),categories,items,projects/);
   assert.match(app,/projects=projectModel\.sanitize\(data\.projects,safeItems\)/);
   assert.match(app,/projects=projectModel\.sanitize\(data\.projects,items\)/);
-  assert.match(sw,/repository-shell-v1-15-source-analysis/);
+  assert.match(sw,/repository-shell-v1-16-preparation-checklist/);
   assert.match(sw,/projects\.js/);
 });
 test('AI runs only after explicit user action and never receives recovery credentials',()=>{
@@ -47,4 +47,12 @@ test('AI runs only after explicit user action and never receives recovery creden
   assert.match(app,/projectAiBody\(p,'relevance',item\)/);
   assert.ok(!read('functions/api/project-brief.js').includes('YOUTUBE_API_KEY'));
   assert.match(app,/project\.linkIds\.includes\(item\.id\)/);
+});
+
+test('preparation brief offers checklist actions and project view renders saved tasks',()=>{
+  for(const id of ['project-checklist','task-dialog','task-form','task-title'])
+    assert.ok(index.includes('id="'+id+'"'),id);
+  assert.match(app,/projectModel\.checklistCandidate\(name,line,sourceId\)/);
+  assert.match(app,/renderChecklist\(project\);\s+renderBrief\(\);/);
+  assert.match(app,/saveChecklist\(project,project\.checklist\.map/);
 });

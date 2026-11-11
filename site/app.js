@@ -42,6 +42,8 @@
     entryProject: $('entry-project'), entryRating: $('entry-rating'),
     projectsSection: $('projects-section'), projectGrid: $('project-grid'), projectEmpty: $('project-empty'),
     projectTools: $('project-tools'), projectBrief: $('project-brief'), projectStatus: $('project-status'),
+    projectChecklist: $('project-checklist'), taskDialog: $('task-dialog'),
+    taskForm: $('task-form'), taskTitle: $('task-title'),
     projectGenerate: $('project-generate'), projectAddLinks: $('project-add-links'),
     projectCalendar: $('project-calendar'), projectEdit: $('project-edit'),
     projectDialog: $('project-dialog'), projectDialogTitle: $('project-dialog-title'),
@@ -248,6 +250,7 @@
     ui.projectBrief.append(headline,tag('p',{className:'project-brief-summary'},brief.summary));
     const linkedSources=new Map((brief.sources||[]).map(source=>[source.source,
       project.linkIds.includes(source.itemId)?items.find(item=>item.id===source.itemId):null]));
+    const savedOrigins=new Set((project.checklist||[]).map(task=>task.origin));
     function sourceReference(number, label) {
       const item=linkedSources.get(number);
       return item?tag('a',{href:item.url,target:'_blank',rel:'noopener noreferrer'},label):tag('span',{},label);
@@ -272,6 +275,26 @@
           row.append(line.text+' ',sourceReference(line.source,'[Source '+line.source+']'),
             tag('div',{className:'project-brief-meta'},'“'+line.quote+'”'));
         }
+        const sourceId=linkedSources.get(line?.source)?.id||'';
+        const candidate=projectModel.checklistCandidate(name,line,sourceId);
+        if(candidate){
+          const saved=savedOrigins.has(candidate.origin);
+          const add=tag('button',{type:'button',className:'text-action checklist-add'},
+            saved?'Added to checklist':'Add to checklist');
+          add.setAttribute('aria-disabled',String(saved));
+          add.dataset.origin=candidate.origin;
+          add.addEventListener('click',()=>{
+            const tasks=project.checklist||[];
+            if(tasks.some(task=>task.origin===candidate.origin))return;
+            if(tasks.length>=projectModel.MAX_TASKS){showToast('This checklist has reached 100 tasks.');return;}
+            if(saveChecklist(project,[...tasks,{...candidate,id:crypto.randomUUID(),done:false}])){
+              updateChecklistButtons(project);
+              renderChecklist(project);
+              showToast('Added to checklist');
+            }
+          });
+          row.append(add);
+        }
         list.append(row);
       }
       section.append(list);ui.projectBrief.append(section);
@@ -281,6 +304,89 @@
         ? 'AI matched citations to available excerpts. Check the original context and verify applicability before following any suggestion. Video evidence is limited to metadata.'
         : 'This earlier brief used saved details. Prepare again to see source references and evidence quality.'));
   }
+  function saveChecklist(project,next){
+    const previous=project.checklist;
+    project.checklist=next;
+    if(saveData())return true;
+    project.checklist=previous;
+    return false;
+  }
+  function updateChecklistButtons(project){
+    const saved=new Set((project.checklist||[]).map(task=>task.origin));
+    for(const button of ui.projectBrief.querySelectorAll('.checklist-add')){
+      const added=saved.has(button.dataset.origin);
+      button.setAttribute('aria-disabled',String(added));
+      button.textContent=added?'Added to checklist':'Add to checklist';
+    }
+  }
+  let editingTask=null;
+  function renderChecklist(project){
+    const tasks=project.checklist||[];
+    ui.projectChecklist.hidden=!tasks.length;
+    ui.projectChecklist.replaceChildren();
+    if(!tasks.length)return;
+    const heading=tag('div',{className:'project-brief-heading'});
+    const progress=tag('span',{className:'project-brief-meta',role:'status'});
+    const updateProgress=()=>{progress.textContent=project.checklist.filter(task=>task.done).length+' of '+tasks.length+' complete';};
+    updateProgress();
+    heading.append(tag('strong',{},'Preparation checklist'),progress);
+    const list=tag('ul',{className:'project-checklist-list'});
+    for(const task of tasks){
+      const row=tag('li',{className:'project-checklist-task'});
+      const label=tag('label',{className:'checklist-task-label'});
+      const check=tag('input',{type:'checkbox'});
+      check.checked=task.done;
+      label.append(check,tag('span',{},task.title));
+      check.addEventListener('change',()=>{
+        const done=check.checked;
+        if(!saveChecklist(project,project.checklist.map(entry=>entry.id===task.id?{...entry,done}:entry))){
+          check.checked=!done;
+          return;
+        }
+        updateProgress();
+      });
+      const edit=tag('button',{type:'button',className:'text-action','aria-label':'Edit task: '+task.title},'Edit');
+      edit.addEventListener('click',()=>{
+        editingTask={projectId:project.id,taskId:task.id};
+        ui.taskTitle.value=task.title;
+        ui.taskDialog.showModal();
+        ui.taskTitle.focus();
+      });
+      const remove=tag('button',{type:'button',className:'text-action','aria-label':'Remove task: '+task.title},'Remove');
+      remove.addEventListener('click',()=>{
+        if(saveChecklist(project,project.checklist.filter(entry=>entry.id!==task.id))){
+          renderChecklist(project);
+          updateChecklistButtons(project);
+          showToast('Task removed');
+        }
+      });
+      const actions=tag('div',{className:'checklist-task-actions'});
+      actions.append(edit,remove);
+      row.append(label);
+      if(task.detail)row.append(tag('div',{className:'checklist-task-detail'},task.detail));
+      const source=items.find(item=>item.id===task.sourceId);
+      if(source)actions.append(tag('a',{href:source.url,target:'_blank',rel:'noopener noreferrer'},'Open source'));
+      row.append(actions);
+      list.append(row);
+    }
+    ui.projectChecklist.append(heading,list);
+  }
+  $('task-close').addEventListener('click',()=>ui.taskDialog.close());
+  ui.taskForm.addEventListener('submit',event=>{
+    event.preventDefault();
+    const project=activeProject();
+    const title=ui.taskTitle.value.trim();
+    if(!title){ui.taskTitle.focus();return;}
+    if(!project||editingTask?.projectId!==project.id||
+       !project.checklist?.some(task=>task.id===editingTask.taskId)){
+      ui.taskDialog.close();
+      return;
+    }
+    if(saveChecklist(project,project.checklist.map(task=>task.id===editingTask.taskId?{...task,title}:task))){
+      ui.taskDialog.close();
+      renderChecklist(project);
+    }
+  });
   function navigateProject(id){
     if(!projects.some(p=>p.id===id))return;
     currentCategory=null;currentProjectId=id;ui.search.value='';
@@ -385,6 +491,7 @@
       ui.back.hidden=false;ui.back.textContent='← All projects';ui.categories.hidden=true;ui.entries.hidden=false;
       ui.listHeading.textContent='Project links';
       ui.projectCalendar.disabled=!project.date;
+      renderChecklist(project);
       renderBrief();
       renderEntries(selectedItems.filter(e=>project.linkIds.includes(e.id)));
     } else if (currentCategory) {
@@ -772,7 +879,7 @@
     } else {
       if(projects.length>=projectModel.MAX_PROJECTS){showToast('Maximum 80 projects. Delete an unused project first.');return;}
       project={id:crypto.randomUUID?.()||'project-'+Date.now()+'-'+Math.random(),title,purpose,date,
-        created:new Date().toISOString(),linkIds:[],brief:null,insights:{}};
+        created:new Date().toISOString(),linkIds:[],brief:null,insights:{},checklist:[]};
       projects.unshift(project);
     }
     if(saveData()){ui.projectDialog.close();navigateProject(project.id);showToast('Project saved');}

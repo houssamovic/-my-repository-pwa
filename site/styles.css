@@ -133,3 +133,14 @@ dialog{border:none;border-radius:13px;background:#fff;box-shadow:0 24px 85px #1c
 @media(max-width:390px){
   .saved-rating-filter .rating-filter-fields{flex-basis:100%}
 }
+
+.checklist-add{display:block;color:#425540;font-weight:600;min-height:32px}
+.checklist-add[aria-disabled="true"]{color:#626962;cursor:default;text-decoration:none}
+.project-checklist-list{list-style:none;padding:0;margin:12px 0 0}
+.project-checklist-task{border-top:1px solid var(--line);padding:10px 0;font-size:13px}
+.checklist-task-label{display:flex;align-items:flex-start;gap:8px;cursor:pointer}
+.checklist-task-label input{width:18px;height:18px;flex:none;margin:2px 0 0;accent-color:#425540}
+.checklist-task-label input:checked+span{text-decoration:line-through}
+.checklist-task-detail,.checklist-task-actions{margin-left:26px}
+.checklist-task-detail{color:#596057;font-size:12px}
+.checklist-task-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px;font-size:12px}

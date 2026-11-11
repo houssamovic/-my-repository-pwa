@@ -79,5 +79,5 @@ test('minimal rating UI exists and main results apply both filters across all vi
   assert.match(app,/query \|\| dateActive \|\| ratingActive/);
   assert.match(app,/ratingClear\.addEventListener\('click'/);
   assert.match(css,/\.saved-filters/);
-  assert.match(read('site/sw.js'),/repository-shell-v1-15-source-analysis/);
+  assert.match(read('site/sw.js'),/repository-shell-v1-16-preparation-checklist/);
 });
