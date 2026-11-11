@@ -71,6 +71,18 @@ Existing links with valid `created` timestamps are automatically filterable. Imp
 
 **Regression tests:** `node --test tests/*.test.mjs` covers calendar boundaries, presets, inclusive date ranges, invalid and missing dates, and the UI integration.
 
+## Projects & AI preparation (v1.13)
+
+Repository now offers **optional Projects** above the original topic tiles. Each project has a title, a short statement of purpose, and an optional target date. A saved link can belong to a project without leaving its category or being duplicated. Assign links from the **Edit details** dialog, the Android **Share** receipt, or **Add saved links** in a project. Individual links can have an optional personal importance score of 1–10; unrated links remain uncluttered.
+
+Inside each project users can **Prepare with AI** on demand. With the existing Cloudflare Pages Workers AI binding (\`AI\`) the function \`POST /api/project-brief\` generates a short summary, supported tools/materials to verify, suggested approach, unresolved questions and source limitations from up to 12 supplied source excerpts. Clicking **Why relevant?** on a project link requests one short contextual relevance note. The AI is opt-in and receives the project title, purpose, target date, and **only** selected link titles, description excerpts, optional personal notes and rating. No URLs, account identifiers, vault recovery keys or background collection dumps are sent. This tool does not view video footage or inaccessible websites, so source descriptions are not treated as transcripts and the resulting brief must be verified. The frontend stores each generated brief locally and includes it in JSON/encrypted cloud backups. Editing the project, adding/removing links or editing source content invalidates cached briefs so they can be regenerated.
+
+**Calendar reminder:** A project with a target date offers a downloadable \`.ics\` calendar event at 9:00 a.m. on the selected date, including an optional day-before display alarm. The user must **import it into their calendar**; notification behavior depends on the calendar application's policies. Repository does not run background reminders or automatically create calendar events for the user.
+
+**Compatibility & privacy:** The original categories, date filters, link URLs, Android Share Target and PWA manifest stay intact. Project data is stored in the new local key \`repository-v1-projects\`, and backups retain schema version 1 with an **optional \`projects\`** field, so older backups still import. The app is an opt-in cloud-vault backup rather than live sync, and users should export a backup before replacing local data. Public AI endpoints need WAF / rate limits before broad launch to protect the Workers AI allowance. The Cloudflare \`AI\` binding is already required for semantic categorization.
+
+**How to test:** Create a project such as “Repair bedroom drywall,” set a target date, add saved links, then choose **Prepare with AI**. Edit a link to add a private importance score or attach it to a project. Export JSON and verify that the \`projects\` array is included. Open the Android Share receipt and optionally assign a link to a project. For date-based reminders, download and import the calendar event. Run \`node --test tests/*.test.mjs\` for regressions.
+
 ## Current scope
 
 - Android installed PWA appears in Share menu. Share URLs, optionally edit title, description, category or note, and return with Android Back.
