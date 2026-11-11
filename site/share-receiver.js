@@ -2,6 +2,8 @@
   'use strict';
   const ITEMS_KEY = 'repository-v1-items';
   const CATEGORIES_KEY = 'repository-v1-categories';
+  const PROJECTS_KEY = 'repository-v1-projects';
+  const projectModel = globalThis.RepositoryProjects;
   const SHARE_LOG_KEY = 'repository-v12-share-log';
   const CLOUD_DIRTY = 'repository-cloud-dirty-v1';
   let cloudTimer;
@@ -15,6 +17,7 @@
     error: $('capture-error'), errorMessage: $('capture-error-message'),
     title: $('capture-title'), description: $('capture-description'), url: $('capture-url'),
     open: $('capture-open-link'), category: $('capture-category'), note: $('capture-note'),
+    project: $('capture-project'), rating: $('capture-rating'),
     descriptionHint: $('capture-description-hint'),
     done: $('capture-done'), hint: $('capture-exit-hint')
   };
@@ -74,10 +77,12 @@
   let items=readJSON(ITEMS_KEY, []);if(!Array.isArray(items))items=[];
   let categories=readJSON(CATEGORIES_KEY, DEFAULT_CATEGORIES);if(!Array.isArray(categories))categories=[...DEFAULT_CATEGORIES];
   categories=[...new Set([...DEFAULT_CATEGORIES.filter(c=>c!=='Unsorted'),...categories.filter(c=>typeof c==='string'&&c!=='Unsorted'&&c.trim()&&c.length<=45),'Unsorted'])];
+  let projects=projectModel.sanitize(readJSON(PROJECTS_KEY,[]),items);
   let active=null;let edited = {title:false,description:false,category:false,note:false};
   function persist() {
     try {
       localStorage.setItem(ITEMS_KEY,JSON.stringify(items));localStorage.setItem(CATEGORIES_KEY,JSON.stringify(categories));
+      localStorage.setItem(PROJECTS_KEY,JSON.stringify(projects));
       if(globalThis.RepositoryVault?.recovery()) {
         localStorage.setItem(CLOUD_DIRTY,crypto.randomUUID());
         clearTimeout(cloudTimer);
@@ -85,7 +90,7 @@
           if(!navigator.onLine)return;
           try {
             const token=localStorage.getItem(CLOUD_DIRTY);
-            await globalThis.RepositoryVault.backUp({version:1,exported:new Date().toISOString(),categories,items});
+            await globalThis.RepositoryVault.backUp({version:1,exported:new Date().toISOString(),categories,items,projects});
             if(localStorage.getItem(CLOUD_DIRTY)===token)localStorage.removeItem(CLOUD_DIRTY);
           } catch { /* Retry when the main app is opened. */ }
         },800);
@@ -107,7 +112,15 @@
     ui.category.replaceChildren();
     categories.forEach(cat=>{const opt=document.createElement('option');opt.value=cat;opt.textContent=cat;ui.category.append(opt);});
     ui.category.value=categories.includes(item.category)?item.category:'Unsorted';
-    ui.note.value=item.note||'';ui.done.disabled=false;
+    ui.note.value=item.note||'';
+    ui.rating.value=projectModel.importance(item.rating)===null?'':String(item.rating);
+    ui.project.replaceChildren();
+    ui.project.append(Object.assign(document.createElement('option'),{value:'',textContent:'None / keep current projects'}));
+    for(const p of projects){
+      const opt=document.createElement('option');opt.value=p.id;opt.textContent=p.title;ui.project.append(opt);
+    }
+    ui.project.value='';
+    ui.done.disabled=false;
   }
   function showDescriptionHint() {
     if(!ui.descriptionHint)return;
@@ -127,6 +140,13 @@
     else if (field === 'description') {active.description=ui.description.value.slice(0,1200);edited.description=true;active.manual=true;active.metaStatus='manual';}
     else if (field === 'category') {active.category=ui.category.value;active.manualCategory=true;edited.category=true;}
     else if (field === 'note') {active.note=ui.note.value.slice(0,1200);edited.note=true;}
+    else if (field === 'rating') {active.rating=projectModel.importance(ui.rating.value);}
+    else if (field === 'project') {
+      const selected=projects.find(p=>p.id===ui.project.value);
+      if(selected && !selected.linkIds.includes(active.id)){
+        selected.linkIds.push(active.id);selected.brief=null;
+      }
+    }
     if(contentChanged) {active.aiChecked=false;showDescriptionHint();}
     if (!persist()) {status('Could not save changes','Device storage may be full');return;}
     status('Link saved',`Saved to ${active.category} · Changes saved`);
@@ -143,7 +163,7 @@
       },750);
     }
   }
-  ['title','description','category','note'].forEach(field=>ui[field].addEventListener(field==='category'?'change':'input',()=>storeField(field)));
+  ['title','description','category','note','rating','project'].forEach(field=>ui[field].addEventListener(['category','rating','project'].includes(field)?'change':'input',()=>storeField(field)));
   async function classifyUnsorted(item) {
     if(!item || item.category!=='Unsorted' || item.manualCategory || item.aiChecked || !navigator.onLine) return;
     const title=String(item.title||'').trim(), description=String(item.description||'').trim();
@@ -210,7 +230,7 @@
     if(items.length>=20000){fail('Repository is full. Export a backup and free some space.');return;}
     const item={id:(crypto.randomUUID?.()||`id-${Date.now()}-${Math.random()}`),url:data.url,
       title:data.title,description:data.description,category:inferCategory(data.title,data.description,data.url),note:'',
-      created:new Date().toISOString(),metaStatus:'pending',metaAttempts:0,manual:false,manualCategory:false};
+      created:new Date().toISOString(),rating:null,metaStatus:'pending',metaAttempts:0,manual:false,manualCategory:false};
     items.unshift(item);
     if(!persist()) {items.shift();fail('Could not save the link to device storage.');return;}
     renderFields(item);status('Link saved',item.category==='Unsorted'?'Saved · Categorization pending':`Saved to ${item.category} · Edit anything below`);
