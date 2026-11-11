@@ -61,6 +61,16 @@ The existing `/api/metadata?url=...` response format is unchanged. Appending `&d
 
 If the Pages secret was just added, redeploy Production. Keep the replacement key private and never paste it in chat or commit it to GitHub. The installed PWA update does not require reinstalling or restoring links.
 
+## Saved-date browsing (v1.12)
+
+Every new link saved through Android Share or the Repository form already records `created` as an ISO timestamp. Repository now displays its **Saved** date in each link row and offers a compact date filter under Search in both the full collection and every category.
+
+**Date choices:** Any date, Today, Yesterday, Last 7 days, Last 30 days, Specific date, and Date range (inclusive From/To). Text search, selected category, and date filtering work together. Choosing a date on the homepage shows matching links across **all categories**; choosing one within a category only searches that category. Clear date restores the usual tiles or category list without deleting saved links. Relative periods use the **device's local calendar dates**, including daylight-saving boundaries, not UTC midnight.
+
+Existing links with valid `created` timestamps are automatically filterable. Imported older links with no valid timestamp are shown as **Date unavailable**, not assigned a fabricated import date. Their other data is preserved. Existing JSON and encrypted cloud backups remain version 1 compatible. This is a client-side interface change: no new database, login, permissions or external API fees. The PWA's manifest `id` and Android Share Target are unchanged, and reinstalling is unnecessary.
+
+**Regression tests:** `node --test tests/*.test.mjs` covers calendar boundaries, presets, inclusive date ranges, invalid and missing dates, and the UI integration.
+
 ## Current scope
 
 - Android installed PWA appears in Share menu. Share URLs, optionally edit title, description, category or note, and return with Android Back.
