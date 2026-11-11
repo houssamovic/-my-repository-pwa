@@ -70,6 +70,7 @@
       'DTSTART:'+day+'T090000','DTEND:'+day+'T093000',
       'SUMMARY:'+escapeCal('Repository: '+project.title),
       'DESCRIPTION:'+escapeCal(project.purpose+'\nOpen Repository to see your saved sources and preparation brief.'),
+      'BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:Review your Repository project preparation','TRIGGER:-P1D','END:VALARM',
       'END:VEVENT','END:VCALENDAR',''
     ].join('\r\n');
   }
