@@ -21,6 +21,7 @@
     search: $('search-input'), categories: $('categories-section'), grid: $('category-grid'),
     entries: $('entries-section'), list: $('entries-list'), listHeading: $('list-heading'),
     resultCount: $('result-count'), empty: $('empty-message'),
+    organizeButton: $('organize-unsorted-button'), organizeStatus: $('organize-status'),
     toast: $('toast'), entryDialog: $('entry-dialog'), entryForm: $('entry-form'),
     dialogHeading: $('dialog-heading'), entryUrl: $('entry-url'), entryTitle: $('entry-title'),
     entryDescription: $('entry-description'), entryNote: $('entry-note'), entryCategory: $('entry-category'),
@@ -224,6 +225,8 @@
   }
   function render() {
     const query=ui.search.value.trim().toLowerCase();
+    ui.organizeButton.hidden=currentCategory!=='Unsorted';
+    ui.organizeStatus.hidden=currentCategory!=='Unsorted';
     if (currentCategory) {
       ui.eyebrow.textContent='CATEGORY'; ui.title.textContent=currentCategory;
       ui.subtitle.textContent='Your saved material, without the clutter.';
@@ -326,15 +329,16 @@
       const response=await fetch(AI_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({title:usefulTitle?title:'',description:usefulDesc?description:'',categories:categories.filter(c=>c!=='Unsorted')}),
         signal:controller.signal,cache:'no-store'});
-      if(!response.ok) return; // AI not enabled, quota exceeded, or temporarily offline.
+      if(!response.ok) {if(currentCategory==='Unsorted')ui.organizeStatus.textContent='Automatic sorting is unavailable. Check Cloudflare AI connection.';return;} // not connected or quota
       const result=await response.json();
       const current=items.find(e=>e.id===id);
       if(!current || current.category!=='Unsorted'||current.manualCategory||result.status!=='ok') return;
       const category=String(result.category||'').trim();
-      if(category==='Unsorted') {current.aiChecked=true;saveData();return;}
+      if(category==='Unsorted') {current.aiChecked=true;saveData();if(currentCategory==='Unsorted')ui.organizeStatus.textContent='Some titles have no clear category and remain Unsorted.';return;}
       if(!/^[\p{L}\p{N} &+'(),.-]{2,45}$/u.test(category))return;
       if(!categories.includes(category))categories.splice(categories.length-1,0,category);
       current.category=category;current.aiChecked=true;saveData();render();
+      if(currentCategory==='Unsorted')ui.organizeStatus.textContent='Moved a link into '+category+'.';
     } catch { /* best effort: retry next time user opens Repository */ }
     finally {clearTimeout(timer);aiRequestsInFlight--;queueUnsorted();}
   }
@@ -359,6 +363,33 @@
       .slice(0,3).forEach(e => { void enrichItem(e.id); });
     queueUnsorted();
   }
+  ui.organizeButton.addEventListener('click',async()=>{
+    ui.organizeButton.disabled=true;
+    ui.organizeStatus.hidden=false;
+    ui.organizeStatus.textContent='Checking automatic classification…';
+    try {
+      const response=await fetch(AI_ENDPOINT,{cache:'no-store'});
+      const state=response.ok?await response.json():null;
+      if(!state?.available) {
+        ui.organizeStatus.textContent='AI categorization is not active. Add the AI binding in Cloudflare Pages and redeploy.';
+        return;
+      }
+      const eligible=items.filter(e=>e.category==='Unsorted'&&!e.manualCategory&&canClassify({...e,aiChecked:false}));
+      if(!eligible.length){
+        ui.organizeStatus.textContent='Nothing to classify yet. These links need a meaningful title or description.';
+        return;
+      }
+      // Explicit user request allows retrying items previously marked ambiguous.
+      for(const e of eligible){e.aiChecked=false;aiAttemptedInSession.delete(e.id);}
+      saveData();
+      ui.organizeStatus.textContent='Organizing up to '+Math.min(MAX_AI_ATTEMPTS_PER_SESSION,eligible.length)+' links. Categories will update here.';
+      queueUnsorted();
+    } catch {
+      ui.organizeStatus.textContent='Cannot reach automatic categorization. Check the connection and retry.';
+    } finally {
+      ui.organizeButton.disabled=false;
+    }
+  });
   function recordShare(params, status, detail) {
     // Store diagnostic metadata locally only. Do not persist shared text or full URLs.
     const data = {
