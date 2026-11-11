@@ -14,6 +14,8 @@
 .capture-field{display:block;min-height:0}
 .capture-field > span{display:block;font-size:11px;letter-spacing:.2px;color:#686e65;font-weight:650;margin-bottom:5px}
 .capture-field small{color:#9a9e98;font-weight:400;font-size:11px}
+.capture-field .capture-description-hint{display:block;margin-top:3px;color:#747a70;line-height:1.25;font-size:10px}
+.capture-field .capture-description-hint[hidden]{display:none}
 .capture-field input,.capture-field textarea,.capture-field select{border:1px solid #dfe2dc;background:#fff;width:100%;border-radius:8px;color:#272b27;font-size:13px;line-height:1.35;padding:10px 12px;resize:none;outline:none}
 .capture-field input,.capture-field select{height:42px}
 .capture-field textarea{height:63px;min-height:0}

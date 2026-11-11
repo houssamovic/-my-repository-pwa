@@ -127,6 +127,55 @@ async function youtubeTitle(raw, signal) {
   return genuine(result.title).slice(0,250);
 }
 
+// Optional YouTube Data API v3 enrichment for public videos and Shorts.
+// The key lives only in Cloudflare Pages environment secrets, never in the PWA.
+// This returns the creator-provided description, not a generated transcript.
+// Cache successful responses per video for 6 hours to preserve API quota.
+export async function youtubeSnippet(raw, env, signal) {
+  const watch=youtubeVideoUrl(raw);
+  const key=env?.YOUTUBE_API_KEY;
+  if(!watch || typeof key!=='string' || !key.trim()) return null;
+  const id=new URL(watch).searchParams.get('v');
+  const cache=globalThis.caches?.default;
+  const cacheRequest=new Request('https://repository-cache.example.org/youtube/'+id);
+  if(cache) {
+    try {
+      const hit=await cache.match(cacheRequest);
+      if(hit?.ok) {
+        const saved=await hit.json();
+        if(typeof saved?.title==='string' && typeof saved?.description==='string')return saved;
+      }
+    } catch { /* cache may be unavailable in local tests or previews */ }
+  }
+  const api=new URL('https://www.googleapis.com/youtube/v3/videos');
+  api.searchParams.set('part','snippet');
+  api.searchParams.set('id',id);
+  api.searchParams.set('key',key);
+  const response=await fetch(api.href,{
+    signal,redirect:'error',headers:{Accept:'application/json'}
+  });
+  if(!response.ok || !/application\/json/i.test(response.headers.get('content-type')||''))return null;
+  if(Number(response.headers.get('content-length')||0)>50000)return null;
+  const body=await response.text();
+  if(body.length>50000)return null;
+  const data=JSON.parse(body);
+  const snippet=data?.items?.find(item=>item?.id===id)?.snippet;
+  if(!snippet || typeof snippet.title!=='string')return null;
+  const fields={
+    title:genuine(snippet.title).slice(0,250),
+    description:genuine(typeof snippet.description==='string'?snippet.description:'').slice(0,1200)
+  };
+  if(!fields.title && !fields.description)return null;
+  if(cache) {
+    try {
+      await cache.put(cacheRequest,new Response(JSON.stringify(fields),{
+        headers:{'Content-Type':'application/json','Cache-Control':'public, max-age=21600'}
+      }));
+    } catch { /* cache is best effort */ }
+  }
+  return fields;
+}
+
 async function readPage(start, signal) {
   let current = start;
   for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
@@ -172,15 +221,25 @@ async function readPage(start, signal) {
   throw new Error('Too many redirects');
 }
 
-export async function onRequestGet({request}) {
+export async function onRequestGet({request,env}) {
   const raw = new URL(request.url).searchParams.get('url') || '';
   try {validateUrl(raw);} catch {return json({status:'unavailable',title:'',description:''}, 400);}
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
+    const youtube=Boolean(youtubeVideoUrl(raw));
+    // Prefer authoritative video metadata when the owner has configured
+    // the official API; avoid downloading or transcribing video content.
+    if(youtube && env?.YOUTUBE_API_KEY) {
+      try {
+        const snippet=await youtubeSnippet(raw,env,controller.signal);
+        if(snippet?.title || snippet?.description)
+          return json({status:'ok',title:snippet.title||'',description:snippet.description||''});
+      } catch { /* API rate limits, missing public video or network errors */ }
+    }
     let fields = {title:'',description:''};
     try { fields=parseMetadata(await readPage(raw,controller.signal)); } catch { /* public page may disallow bots */ }
-    if (!fields.title && youtubeVideoUrl(raw)) {
+    if (!fields.title && youtube) {
       try {fields.title=await youtubeTitle(raw,controller.signal);} catch { /* optional provider fallback */ }
     }
     return json({status:fields.title || fields.description ? 'ok':'unavailable', ...fields});

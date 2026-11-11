@@ -57,6 +57,7 @@
   }
   let currentCategory = null;
   let editedId = null;
+  let categorySelectedByUser = false;
   let toastTimer = null;
 
   function saveData() {
@@ -154,7 +155,9 @@
     if (!href) return null;
     let plainText = shareText.replace(/https?:\/\/[^\s<>"']+/gi, '').trim().replace(/[\s\-–—|:]+$/, '').trim();
     if (plainText.length > 450) plainText = plainText.slice(0, 450);
-    const title = (shareTitle && !extractUrl(shareTitle) && shareTitle.length < 250 ? shareTitle : '') || (plainText && plainText.length <= 120 ? plainText : '') || defaultTitle(href);
+    const generic=/^(?:youtube(?: (?:short|video))?|instagram(?: (?:reel|post))?|facebook(?: post)?|x post|tiktok(?: video)?|watch this video|shared from (?:youtube|instagram|tiktok))$/i;
+    const usableTitle=shareTitle && !extractUrl(shareTitle) && shareTitle.length < 250 && !generic.test(shareTitle) ? shareTitle : '';
+    const title=usableTitle || (plainText && plainText.length<=120 && !generic.test(plainText) ? plainText : '') || defaultTitle(href);
     const description = plainText && plainText !== title ? plainText : `${sourceKind(href)} · Shared link (content not analyzed)`;
     return {url: href, title: title.slice(0,250), description: description.slice(0,1200)};
   }
@@ -268,6 +271,7 @@
     ui.entryDescription.value=entry?.description || '';
     ui.entryNote.value=entry?.note || '';
     populateCategorySelect(entry?.category || (currentCategory || 'Auto'));
+    categorySelectedByUser=false;
     ui.deleteEntry.hidden=!entry;
     ui.retryDetails.hidden=!entry;
     ui.entryDialog.showModal();
@@ -294,8 +298,10 @@
       if (payload && payload.status === 'ok') {
         const realTitle = String(payload.title || '').trim().slice(0,250);
         const realDesc = String(payload.description || '').trim().slice(0,1200);
+        const previousTitle=found.title,previousDescription=found.description;
         if (realTitle && !/^instagram (post|reel)$|^x post$|^youtube (short|video)$/i.test(realTitle)) found.title = realTitle;
         if (realDesc) found.description = realDesc;
+        if(found.title!==previousTitle||found.description!==previousDescription){found.aiChecked=false;aiAttemptedInSession.delete(found.id);}
         else if (/content not analyzed|shared link/i.test(found.description)) found.description = 'Description not provided by source';
         if (!found.manualCategory) found.category = inferCategory(found.title, found.description, found.url);
         found.metaStatus = 'done';
@@ -321,10 +327,11 @@
        item.aiChecked || aiAttemptedInSession.has(id) || !navigator.onLine) return;
     const title=String(item.title||'').trim(), description=String(item.description||'').trim();
     const usefulTitle=title.length>=8 && !/^(?:youtube|youtube (?:video|short)|instagram (?:post|reel)|x post|facebook post|saved link|link|youtu\.be|(?:www\.|m\.)?youtube\.com|(?:www\.)?instagram\.com|(?:www\.)?(?:x|twitter)\.com)$/i.test(title);
-    const usefulDesc=description.length>=15 && !/^(?:shared link|saved link|details unavailable|description not provided|youtube ·|instagram ·)/i.test(description);
+    const usefulDesc=description.length>=15 && !/^(?:(?:youtube(?: (?:video|short))?|instagram(?: (?:reel|post))?|facebook(?: post)?|tiktok(?: video)?)\s*[·|:-]\s*)?(?:shared link|saved link|details unavailable|description not provided)/i.test(description);
     if(!usefulTitle&&!usefulDesc) return;
     aiAttemptedInSession.add(id);
     aiRequestsInFlight++;
+    const originalText=title+'\n'+description;
     const controller=new AbortController();
     const timer=setTimeout(()=>controller.abort(),12000);
     try {
@@ -334,7 +341,7 @@
       if(!response.ok) {if(currentCategory==='Unsorted')ui.organizeStatus.textContent='Automatic sorting is unavailable. Check Cloudflare AI connection.';return;} // not connected or quota
       const result=await response.json();
       const current=items.find(e=>e.id===id);
-      if(!current || current.category!=='Unsorted'||current.manualCategory||result.status!=='ok') return;
+      if(!current || current.category!=='Unsorted'||current.manualCategory||result.status!=='ok'||(current.title+'\n'+current.description)!==originalText) return;
       const category=String(result.category||'').trim();
       if(category==='Unsorted') {current.aiChecked=true;saveData();if(currentCategory==='Unsorted')ui.organizeStatus.textContent='Some titles have no clear category and remain Unsorted.';return;}
       if(!/^[\p{L}\p{N} &+'(),.-]{2,45}$/u.test(category))return;
@@ -349,7 +356,7 @@
     if(!item || item.category!=='Unsorted'||item.manualCategory||item.aiChecked)return false;
     const title=String(item.title||'').trim(),description=String(item.description||'').trim();
     const titleUseful=title.length>=8&&!/^(?:youtube|youtube (?:video|short)|instagram (?:post|reel)|x post|facebook post|saved link|link|youtu\.be|(?:www\.|m\.)?youtube\.com|(?:www\.)?instagram\.com|(?:www\.)?(?:x|twitter)\.com)$/i.test(title);
-    const descUseful=description.length>=15&&!/^(?:shared link|saved link|details unavailable|description not provided|youtube ·|instagram ·)/i.test(description);
+    const descUseful=description.length>=15&&!/^(?:(?:youtube(?: (?:video|short))?|instagram(?: (?:reel|post))?|facebook(?: post)?|tiktok(?: video)?)\s*[·|:-]\s*)?(?:shared link|saved link|details unavailable|description not provided)/i.test(description);
     return titleUseful||descUseful;
   }
   async function checkAiConnection(force=false) {
@@ -394,20 +401,34 @@
     ui.organizeStatus.textContent='Checking automatic classification…';
     try {
       const available=await checkAiConnection(true);
-      if(!available) {
-        ui.organizeStatus.textContent='AI categorization is not active. Add the AI binding in Cloudflare Pages and redeploy.';
-        return;
+      // Re-fetch descriptions for a bounded batch of previously opaque videos.
+      // This is especially valuable after adding the optional YouTube API key.
+      const missing=items.filter(e=>{
+        if(e.category!=='Unsorted'||e.manual||e.manualCategory||canClassify({...e,aiChecked:false}))return false;
+        try {
+          const host=new URL(e.url).hostname.toLowerCase();
+          return /^(?:www\.|m\.)?(?:youtube\.com|instagram\.com)$/.test(host)||/^(?:www\.)?youtu\.be$/.test(host);
+        }catch{return false;}
+      }).slice(0,5);
+      for(const e of missing) {
+        e.metaStatus='pending';e.metaAttempts=0;e.aiChecked=false;
+        aiAttemptedInSession.delete(e.id);
+      }
+      if(missing.length) {
+        saveData();
+        missing.forEach(e=>{void enrichItem(e.id);});
       }
       const eligible=items.filter(e=>e.category==='Unsorted'&&!e.manualCategory&&canClassify({...e,aiChecked:false}));
-      if(!eligible.length){
-        ui.organizeStatus.textContent='Nothing to classify yet. These links need a meaningful title or description.';
-        return;
+      if(available) {
+        for(const e of eligible){e.aiChecked=false;aiAttemptedInSession.delete(e.id);}
+        saveData();
+        queueUnsorted();
+        ui.organizeStatus.textContent='Checking '+eligible.length+' readable links'+(missing.length?' and refreshing '+missing.length+' video links.':'.');
+      } else if(missing.length) {
+        ui.organizeStatus.textContent='Refreshing '+missing.length+' videos. AI sorting is not connected, so only basic categorization is available.';
+      } else {
+        ui.organizeStatus.textContent='AI sorting is not connected. Add the AI binding in Cloudflare Pages; videos without descriptions cannot be classified reliably.';
       }
-      // Explicit user request allows retrying items previously marked ambiguous.
-      for(const e of eligible){e.aiChecked=false;aiAttemptedInSession.delete(e.id);}
-      saveData();
-      ui.organizeStatus.textContent='Organizing up to '+Math.min(MAX_AI_ATTEMPTS_PER_SESSION,eligible.length)+' links. Categories will update here.';
-      queueUnsorted();
     } catch {
       ui.organizeStatus.textContent='Cannot reach automatic categorization. Check the connection and retry.';
     } finally {
@@ -484,6 +505,7 @@
     if (e.key==='/' && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName) && !ui.entryDialog.open && !ui.categoryDialog.open) {e.preventDefault();ui.search.focus();}
   });
   $('close-entry-dialog').addEventListener('click',()=>ui.entryDialog.close());
+  ui.entryCategory.addEventListener('change',()=>{categorySelectedByUser=true;});
   ui.entryForm.addEventListener('submit',(event)=>{
     event.preventDefault();
     const url=cleanUrl(ui.entryUrl.value);
@@ -497,9 +519,19 @@
       if (!found) return;
       const dupe=items.some(e=>e.id!==editedId && canonicalUrl(e.url)===canonicalUrl(url));
       if (dupe){showToast('This URL is already in the repository.');return;}
-      Object.assign(found,{url,title,description,category:selected==='Auto'?inferCategory(title,description,url):selected,
-        note:ui.entryNote.value.trim().slice(0,1200),manual:true, manualCategory:true, metaStatus:'manual'});
-      if (saveData()) {ui.entryDialog.close();render();showToast('Saved changes');}
+      const detailsChanged=url!==found.url || title!==found.title || description!==found.description;
+      const manualCategory=categorySelectedByUser?selected!=='Auto':Boolean(found.manualCategory);
+      const nextCategory=manualCategory ? (categorySelectedByUser?selected:found.category) :
+        (detailsChanged||categorySelectedByUser?inferCategory(title,description,url):found.category);
+      Object.assign(found,{url,title,description,category:nextCategory,
+        note:ui.entryNote.value.trim().slice(0,1200),manual:detailsChanged?true:found.manual,
+        manualCategory,metaStatus:detailsChanged?'manual':found.metaStatus,
+        aiChecked:detailsChanged||categorySelectedByUser?false:found.aiChecked});
+      if(detailsChanged||categorySelectedByUser)aiAttemptedInSession.delete(found.id);
+      if (saveData()) {
+        ui.entryDialog.close();render();showToast('Saved changes');
+        if(found.category==='Unsorted'&&!found.manualCategory)void classifyUnsorted(found.id);
+      }
     } else {
       const result=addItem({url,title,description,autoMetadata:!ui.entryTitle.value.trim() && !ui.entryDescription.value.trim()},selected);
       if (result.error){showToast(result.error);return;}
@@ -507,7 +539,8 @@
       if (result.item) {
         if (ui.entryNote.value.trim()) {result.item.note=ui.entryNote.value.trim().slice(0,1200);saveData();}
         navigate(result.item.category);showToast(result.duplicate?'Already saved':'Link saved');
-        if (result.item.metaStatus === 'pending') void enrichItem(result.item.id); }
+        if (result.item.metaStatus === 'pending') void enrichItem(result.item.id);
+        else if(result.item.category==='Unsorted'&&!result.item.manualCategory)void classifyUnsorted(result.item.id); }
     }
   });
   ui.entryUrl.addEventListener('input',()=>ui.entryUrl.setCustomValidity(''));

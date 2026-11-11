@@ -5,6 +5,7 @@
   const SHARE_LOG_KEY = 'repository-v12-share-log';
   const CLOUD_DIRTY = 'repository-cloud-dirty-v1';
   let cloudTimer;
+  let manualCategoryTimer;
   const META_ENDPOINT = '/api/metadata';
   const AI_ENDPOINT = '/api/classify';
   const DEFAULT_CATEGORIES = ['DIY', 'Food & Recipes', 'Travel', 'Technology', 'Reading', 'Unsorted'];
@@ -14,6 +15,7 @@
     error: $('capture-error'), errorMessage: $('capture-error-message'),
     title: $('capture-title'), description: $('capture-description'), url: $('capture-url'),
     open: $('capture-open-link'), category: $('capture-category'), note: $('capture-note'),
+    descriptionHint: $('capture-description-hint'),
     done: $('capture-done'), hint: $('capture-exit-hint')
   };
   function readJSON(key, fallback) {
@@ -59,8 +61,9 @@
     const href = cleanUrl(params.get('url')||'') || extractUrl(params.get('url')||'') || extractUrl(shareText) || extractUrl(shareTitle);
     if (!href) return null;
     const text = shareText.replace(/https?:\/\/[^\s<>"']+/gi,'').trim().replace(/[\s\-–—|:]+$/,'').trim().slice(0,450);
-    const title = (shareTitle && !extractUrl(shareTitle) && shareTitle.length<250 ? shareTitle : '') ||
-      (text && text.length<=120 ? text : '') || fallbackTitle(href);
+    const generic = /^(?:youtube(?: (?:short|video))?|instagram(?: (?:reel|post))?|facebook(?: post)?|x post|tiktok(?: video)?|watch this video|shared from (?:youtube|instagram|tiktok))$/i;
+    const sourceTitle = shareTitle && !extractUrl(shareTitle) && shareTitle.length<250 && !generic.test(shareTitle) ? shareTitle : '';
+    const title = sourceTitle || (text && text.length<=120 && !generic.test(text) ? text : '') || fallbackTitle(href);
     return {url:href, title:title.slice(0,250), description:(text && text!==title ? text : `${sourceKind(href)} · Shared link (content not analyzed)`).slice(0,1200)};
   }
   function inferCategory(title,description,url) {
@@ -99,11 +102,17 @@
   function renderFields(item) {
     active=item;ui.content.hidden=false;
     ui.title.value=item.title;ui.description.value=publicDescription(item.description);
+    showDescriptionHint();
     ui.url.value=item.url;ui.open.href=item.url;
     ui.category.replaceChildren();
     categories.forEach(cat=>{const opt=document.createElement('option');opt.value=cat;opt.textContent=cat;ui.category.append(opt);});
     ui.category.value=categories.includes(item.category)?item.category:'Unsorted';
     ui.note.value=item.note||'';ui.done.disabled=false;
+  }
+  function showDescriptionHint() {
+    if(!ui.descriptionHint)return;
+    const kind=active?sourceKind(active.url):'';
+    ui.descriptionHint.hidden=!/(?:YouTube|Instagram|TikTok|Facebook)/.test(kind)||!!ui.description.value.trim();
   }
   function publicDescription(value) {
     // Don't display internal placeholder language as if it were source content.
@@ -113,20 +122,35 @@
   function fail(message) {ui.error.hidden=false;ui.errorMessage.textContent=message;status('Link not saved','Please share a valid webpage link');ui.done.textContent='Done · Return';ui.done.disabled=false;}
   function storeField(field) {
     if (!active) return;
+    const contentChanged=field==='title'||field==='description';
     if (field === 'title') {active.title=ui.title.value.slice(0,250);edited.title=true;active.manual=true;active.metaStatus='manual';}
     else if (field === 'description') {active.description=ui.description.value.slice(0,1200);edited.description=true;active.manual=true;active.metaStatus='manual';}
     else if (field === 'category') {active.category=ui.category.value;active.manualCategory=true;edited.category=true;}
     else if (field === 'note') {active.note=ui.note.value.slice(0,1200);edited.note=true;}
+    if(contentChanged) {active.aiChecked=false;showDescriptionHint();}
     if (!persist()) {status('Could not save changes','Device storage may be full');return;}
     status('Link saved',`Saved to ${active.category} · Changes saved`);
+    if(contentChanged && !active.manualCategory) {
+      clearTimeout(manualCategoryTimer);
+      const id=active.id;
+      manualCategoryTimer=setTimeout(()=>{
+        if(!active||active.id!==id||active.manualCategory)return;
+        const chosen=inferCategory(active.title,active.description,active.url);
+        if(chosen!=='Unsorted' && chosen!==active.category) {
+          active.category=chosen; persist();renderFields(active);
+          status('Link saved','Sorted under '+chosen);
+        } else if(active.category==='Unsorted') void classifyUnsorted(active);
+      },750);
+    }
   }
   ['title','description','category','note'].forEach(field=>ui[field].addEventListener(field==='category'?'change':'input',()=>storeField(field)));
   async function classifyUnsorted(item) {
     if(!item || item.category!=='Unsorted' || item.manualCategory || item.aiChecked || !navigator.onLine) return;
     const title=String(item.title||'').trim(), description=String(item.description||'').trim();
     const usefulTitle=title.length>=8&&!/^(?:youtube|youtube (?:short|video)|instagram (?:post|reel)|x post|facebook post|saved link|link|youtu\.be|(?:www\.|m\.)?youtube\.com|(?:www\.)?instagram\.com|(?:www\.)?(?:x|twitter)\.com)$/i.test(title);
-    const usefulDesc=description.length>=15&&!/^(?:shared link|saved link|details unavailable|description not provided|youtube ·|instagram ·)/i.test(description);
+    const usefulDesc=description.length>=15&&!/^(?:(?:youtube(?: (?:video|short))?|instagram(?: (?:reel|post))?|facebook(?: post)?|tiktok(?: video)?)\s*[·|:-]\s*)?(?:shared link|saved link|details unavailable|description not provided)/i.test(description);
     if(!usefulTitle&&!usefulDesc)return;
+    const originalText=title+'\n'+description;
     const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),12000);
     try {
       const response=await fetch(AI_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},
@@ -134,7 +158,7 @@
         signal:ctrl.signal,cache:'no-store'});
       if(!response.ok){status('Link saved','Automatic sorting unavailable · Saved in Unsorted');return;} // Optional AI binding is not configured or unavailable.
       const result=await response.json();
-      if(item.manualCategory || item.category!=='Unsorted'||result.status!=='ok')return;
+      if(item.manualCategory || item.category!=='Unsorted'||result.status!=='ok'||(item.title+'\n'+item.description)!==originalText)return;
       const category=String(result.category||'').trim();
       if(category==='Unsorted'){item.aiChecked=true;persist();status('Link saved','No clear topic detected · Saved in Unsorted');return;}
       if(!/^[\p{L}\p{N} &+'(),.-]{2,45}$/u.test(category))return;
@@ -159,7 +183,7 @@
         const newTitle=String(metadata.title||'').trim().slice(0,250);
         const newDesc=String(metadata.description||'').trim().slice(0,1200);
         if (!item.manual && !edited.title && newTitle && !/^(instagram (reel|post)|x post|youtube (short|video))$/i.test(newTitle)) {item.title=newTitle;ui.title.value=newTitle;}
-        if (!item.manual && !edited.description && newDesc) {item.description=newDesc;ui.description.value=newDesc;}
+        if (!item.manual && !edited.description && newDesc) {item.description=newDesc;ui.description.value=newDesc;showDescriptionHint();}
         if (!item.manualCategory && !edited.category) {item.category=inferCategory(item.title,item.description,item.url);ui.category.value=item.category;}
         item.metaStatus='done';
       } else if (metadata.status === 'unavailable') {
