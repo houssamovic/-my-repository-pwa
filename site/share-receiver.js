@@ -79,6 +79,11 @@
   categories=[...new Set([...DEFAULT_CATEGORIES.filter(c=>c!=='Unsorted'),...categories.filter(c=>typeof c==='string'&&c!=='Unsorted'&&c.trim()&&c.length<=45),'Unsorted'])];
   let projects=projectModel.sanitize(readJSON(PROJECTS_KEY,[]),items);
   let active=null;let edited = {title:false,description:false,category:false,note:false};
+  function invalidateBriefsFor(itemId){
+    for(const p of projects)if(p.linkIds.includes(itemId)){
+      p.brief=null;if(p.insights)delete p.insights[itemId];
+    }
+  }
   function persist() {
     try {
       localStorage.setItem(ITEMS_KEY,JSON.stringify(items));localStorage.setItem(CATEGORIES_KEY,JSON.stringify(categories));
@@ -148,6 +153,7 @@
       }
     }
     if(contentChanged) {active.aiChecked=false;showDescriptionHint();}
+    if(contentChanged||field==='note'||field==='rating')invalidateBriefsFor(active.id);
     if (!persist()) {status('Could not save changes','Device storage may be full');return;}
     status('Link saved',`Saved to ${active.category} · Changes saved`);
     if(contentChanged && !active.manualCategory) {
@@ -206,6 +212,7 @@
         if (!item.manual && !edited.description && newDesc) {item.description=newDesc;ui.description.value=newDesc;showDescriptionHint();}
         if (!item.manualCategory && !edited.category) {item.category=inferCategory(item.title,item.description,item.url);ui.category.value=item.category;}
         item.metaStatus='done';
+        invalidateBriefsFor(item.id);
       } else if (metadata.status === 'unavailable') {
         item.metaStatus='unavailable';
         if (/content not analyzed/i.test(item.description)) item.description='Details unavailable from source';
