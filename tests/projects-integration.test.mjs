@@ -18,7 +18,7 @@ test('project controls and source scripts are present on main page',()=>{
   assert.match(app,/function navigateProject/);
   assert.match(app,/function renderBrief/);
   assert.match(app,/function explainProjectLink/);
-  assert.match(app,/mode:'relevance'/);
+  assert.match(app,/projectAiBody\(p,'relevance',item\)/);
   assert.match(app,/projectAiBody\(p,'brief'\)/);
 });
 test('Share Target receives rating and optional project without changing manifest',()=>{
