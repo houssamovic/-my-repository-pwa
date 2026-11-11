@@ -14,6 +14,7 @@
   <title>Repository</title>
   <script defer src="/classifier.js"></script>
   <script defer src="/cloud-vault.js"></script>
+  <script defer src="/date-filter.js"></script>
   <script defer src="/app.js"></script>
 </head>
 <body>
@@ -34,6 +35,29 @@
           <input id="search-input" type="search" placeholder="Find something you've saved..." autocomplete="off" spellcheck="false">
           <span class="search-shortcut" aria-hidden="true">/</span>
         </label>
+        <div class="saved-date-filter" aria-label="Filter saved links by date">
+          <label for="saved-date-mode">Saved</label>
+          <select id="saved-date-mode" aria-label="Saved date filter">
+            <option value="all">Any date</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="week">Last 7 days</option>
+            <option value="month">Last 30 days</option>
+            <option value="day">Specific date</option>
+            <option value="range">Date range</option>
+          </select>
+          <div id="saved-date-exact" class="date-filter-fields" hidden>
+            <label for="saved-date-on">On</label>
+            <input id="saved-date-on" type="date" aria-label="Date links were saved">
+          </div>
+          <div id="saved-date-range" class="date-filter-fields" hidden>
+            <label for="saved-date-from">From</label>
+            <input id="saved-date-from" type="date" aria-label="Saved on or after">
+            <label for="saved-date-to">To</label>
+            <input id="saved-date-to" type="date" aria-label="Saved on or before">
+          </div>
+          <button id="saved-date-clear" type="button" class="text-action" hidden>Clear date</button>
+        </div>
       </section>
       <section id="categories-section" aria-label="Categories">
         <div class="section-heading"><h2>Categories</h2><button id="new-category-button" class="text-action" type="button">+ New category</button></div>
@@ -48,7 +72,7 @@
       </section>
     </main>
     <footer class="footer">
-      <span>Prototype v1.11 · Saved locally on this device</span>
+      <span>Prototype v1.12 · Saved locally on this device</span>
       <div class="footer-actions"><button type="button" id="show-share-diagnostics">Share diagnostics</button><button type="button" id="cloud-backup-button">Cloud backup</button><button type="button" id="export-button">Export backup</button><label for="import-input" class="import-label">Import backup</label><input type="file" id="import-input" accept="application/json,.json" hidden></div>
     </footer>
   </div>
