@@ -52,3 +52,35 @@ test('client exposes refresh for categorized links and preserves original catego
   assert.match(js,/latest\.description=received/);
   assert.match(js,/if\(latest\.category==='Unsorted'&&!latest\.manualCategory\)/);
 });
+
+test('diagnoses an invalid Google API key from a safe allowlisted reason',async()=>{
+  globalThis.caches=undefined;
+  globalThis.fetch=async url=>String(url).includes('googleapis.com')?
+    new Response(JSON.stringify({error:{message:'The secret is dummy-test-key',details:[{reason:'API_KEY_INVALID'}]}}),{
+      status:400,headers:{'content-type':'application/json'}
+    }):new Response('',{status:403});
+  const output=await (await api.onRequestGet({...req(true),env:{YOUTUBE_API_KEY:'dummy-test-key'}})).json();
+  assert.equal(output.diagnostic.youtubeApi,'invalid_key');
+  assert.equal(output.diagnostic.youtubeHttpStatus,400);
+  assert.equal(JSON.stringify(output).includes('dummy-test-key'),false);
+});
+test('distinguishes generic bad request from invalid API key',async()=>{
+  globalThis.caches=undefined;
+  globalThis.fetch=async url=>String(url).includes('googleapis.com')?
+    new Response(JSON.stringify({error:{errors:[{reason:'unrelated'}]}}),{
+      status:400,headers:{'content-type':'application/json'}
+    }):new Response('',{status:403});
+  const output=await (await api.onRequestGet({...req(true),env:{YOUTUBE_API_KEY:'dummy-test-key'}})).json();
+  assert.equal(output.diagnostic.youtubeApi,'bad_request');
+  assert.equal(output.diagnostic.youtubeHttpStatus,400);
+});
+test('distinguishes Cloudflare connection failure from Google HTTP errors',async()=>{
+  globalThis.caches=undefined;
+  globalThis.fetch=async url=>{
+    if(String(url).includes('googleapis.com'))throw new Error('Connectivity failed');
+    return new Response('',{status:403});
+  };
+  const output=await (await api.onRequestGet({...req(true),env:{YOUTUBE_API_KEY:'dummy-test-key'}})).json();
+  assert.equal(output.diagnostic.youtubeApi,'network_error');
+  assert.equal(output.diagnostic.youtubeHttpStatus,undefined);
+});
