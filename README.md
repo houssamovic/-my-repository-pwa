@@ -4,6 +4,15 @@ Minimalist link repository with Android Share Target, editable share receipt, di
 
 Production URL: <https://my-repository-pwa.pages.dev/>. GitHub source: `houssamovic/-my-repository-pwa`.
 
+## Metadata enrichment update (November 2026)
+
+- The Pages Function \`/api/metadata\` now reads Open Graph/Twitter fields and public schema.org JSON-LD for articles, how-tos, recipes and videos.
+- Generic social login metadata is ignored rather than used as a misleading description.
+- Public YouTube oEmbed supplies a **best-effort title fallback** when YouTube page HTML is inaccessible; it cannot reveal transcripts or reliably provide descriptions.
+- Restricted Instagram, X and Facebook content still requires user-supplied details if metadata is unavailable. Do not use Meta's embedding API as a general content extraction service.
+- No client-side PWA code, manifest ID, Android share target, local storage or cloud vault credentials changed. No reinstall necessary. Existing entries can be rechecked using **Edit details → Refresh details**.
+- Tests: \`node --test tests/*.test.mjs\`.
+
 ## Current scope
 
 - Android installed PWA appears in Share menu. Share URLs, optionally edit title, description, category or note, and return with Android Back.
