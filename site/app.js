@@ -209,6 +209,56 @@
     return el;
   }
   function categoryCount(c) { return items.filter(e=>e.category === c).length; }
+  function activeProject(){return projects.find(p=>p.id===currentProjectId)||null;}
+  function projectDateLabel(date){
+    if(!projectModel.validDate(date))return 'No target date';
+    return 'Target '+new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',year:'numeric'}).format(new Date(date+'T12:00:00'));
+  }
+  function renderProjects(){
+    ui.projectGrid.replaceChildren();
+    ui.projectEmpty.hidden=projects.length>0;
+    for(const project of projects){
+      const card=tag('button',{type:'button',className:'project-tile'});
+      card.append(tag('span',{className:'project-tile-name'},project.title));
+      const details=tag('span',{className:'project-tile-meta'},
+        project.linkIds.length+' saved '+(project.linkIds.length===1?'link':'links')+
+        ' · '+projectDateLabel(project.date));
+      card.append(details);
+      if(project.brief)card.append(tag('span',{className:'project-ready'},'Preparation saved'));
+      card.addEventListener('click',()=>navigateProject(project.id));
+      ui.projectGrid.append(card);
+    }
+  }
+  function renderBrief(){
+    const project=activeProject();
+    ui.projectBrief.replaceChildren();
+    ui.projectBrief.hidden=!project?.brief;
+    if(!project?.brief)return;
+    const brief=project.brief;
+    const headline=tag('div',{className:'project-brief-heading'});
+    const info=(brief.sourceCount||0)+' sources · Generated '+
+      (brief.generated?dates.label(brief.generated).replace(/^Saved /,''):'previously');
+    headline.append(tag('strong',{},'Preparation brief'),
+      tag('span',{className:'project-brief-meta'},info));
+    ui.projectBrief.append(headline,tag('p',{className:'project-brief-summary'},brief.summary));
+    for(const [name,label] of [['tools','Tools & materials to verify'],['steps','Suggested approach'],['questions','Open questions'],['limitations','Source limitations']]){
+      if(!brief[name]?.length)continue;
+      const section=tag('section',{className:'project-brief-section'});
+      section.append(tag('h3',{},label));
+      const list=tag('ul');
+      for(const line of brief[name])list.append(tag('li',{},line));
+      section.append(list);ui.projectBrief.append(section);
+    }
+    ui.projectBrief.append(tag('p',{className:'project-brief-disclaimer'},
+      'Generated from available link titles, descriptions and your notes, not from watching or reading inaccessible content. Verify details using the original sources.'));
+  }
+  function navigateProject(id){
+    if(!projects.some(p=>p.id===id))return;
+    currentCategory=null;currentProjectId=id;ui.search.value='';
+    ui.refreshDescriptionsStatus.hidden=true;
+    ui.projectStatus.hidden=true;
+    render();window.scrollTo({top:0,behavior:'instant'});
+  }
   function renderCategories() {
     ui.grid.replaceChildren();
     categories.forEach(category => {
@@ -252,9 +302,11 @@
     if (!results.length) {
       ui.list.hidden=true;
       ui.empty.hidden=false;
-      ui.empty.textContent = savedDateFilter.mode==='range' && !savedDateFilter.start && !savedDateFilter.end
+      ui.empty.textContent = !items.length?'No links yet. Save a link to get started.' :
+        savedDateFilter.mode==='range' && !savedDateFilter.start && !savedDateFilter.end
         ? 'Choose a start or end date to filter your saved links.'
         : savedDateFilter.mode!=='all' ? 'No links saved in this date period match your search and category.'
+        : activeProject() ? 'No links in this project yet. Add existing links or save a new one.'
         : currentCategory ? 'Nothing here yet. Share a link or use “Save link” to add the first item.' : 'No saved links match your search.';
       return;
     }
@@ -286,11 +338,23 @@
     const query=ui.search.value.trim().toLowerCase();
     const dateActive=savedDateFilter.mode!=='all';
     const selectedItems=items.filter(e=>matches(e,query)&&dates.matches(e,savedDateFilter));
-    ui.organizeButton.hidden=currentCategory!=='Unsorted';
-    ui.organizeStatus.hidden=currentCategory!=='Unsorted';
-    ui.refreshDescriptionsButton.hidden=!currentCategory||pendingYouTubeDescriptions(currentCategory).length===0;
+    const project=activeProject();
+    ui.projectTools.hidden=!project;
+    ui.organizeButton.hidden=currentCategory!=='Unsorted'||!!project;
+    ui.organizeStatus.hidden=currentCategory!=='Unsorted'||!!project;
+    ui.refreshDescriptionsButton.hidden=!!project||!currentCategory||pendingYouTubeDescriptions(currentCategory).length===0;
     if(!currentCategory)ui.refreshDescriptionsStatus.hidden=true;
-    if (currentCategory) {
+    ui.projectsSection.hidden=!!project||!!currentCategory||!!query||dateActive;
+    if(project){
+      ui.eyebrow.textContent='PROJECT';ui.title.textContent=project.title;
+      ui.subtitle.textContent=[project.purpose,projectDateLabel(project.date)].filter(Boolean).join(' · ');
+      ui.search.placeholder='Search links in this project...';
+      ui.back.hidden=false;ui.categories.hidden=true;ui.entries.hidden=false;
+      ui.listHeading.textContent='Project links';
+      ui.projectCalendar.disabled=!project.date;
+      renderBrief();
+      renderEntries(selectedItems.filter(e=>project.linkIds.includes(e.id)));
+    } else if (currentCategory) {
       ui.eyebrow.textContent='CATEGORY'; ui.title.textContent=currentCategory;
       ui.subtitle.textContent='Your saved material, without the clutter.';
       ui.search.placeholder=`Search within ${currentCategory}...`;
@@ -309,7 +373,7 @@
       ui.subtitle.textContent='A quiet home for everything worth keeping.';
       ui.search.placeholder="Find something you've saved...";
       ui.back.hidden=true; ui.categories.hidden=false; ui.entries.hidden=true;
-      renderCategories();
+      renderProjects();renderCategories();
     }
   }
   function updateDateFields() {
@@ -341,7 +405,7 @@
   });
   updateDateFields();
   function matches(e,q) { return !q || [e.title,e.description,e.url,e.category,e.note||''].join(' ').toLowerCase().includes(q); }
-  function navigate(category=null) { currentCategory=category;ui.search.value='';ui.refreshDescriptionsStatus.hidden=true;ui.refreshDescriptionsStatus.textContent='';render();window.scrollTo({top:0,behavior:'instant'}); }
+  function navigate(category=null) { currentCategory=category;currentProjectId=null;ui.search.value='';ui.refreshDescriptionsStatus.hidden=true;ui.refreshDescriptionsStatus.textContent='';render();window.scrollTo({top:0,behavior:'instant'}); }
   function populateCategorySelect(selected='Auto') {
     ui.entryCategory.replaceChildren();
     ui.entryCategory.append(tag('option',{value:'Auto'},'Automatic (basic rules)'));
