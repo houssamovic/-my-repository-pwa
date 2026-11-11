@@ -42,9 +42,47 @@
   function safeInsight(value){
     return typeof value==='string'?value.trim().slice(0,600):'';
   }
+  const EVIDENCE_LABELS=Object.freeze({
+    article:'Article excerpt',
+    page_metadata:'Page metadata only',
+    youtube_metadata:'YouTube title and available creator description',
+    youtube_title:'YouTube title only',
+    saved:'Saved details only · source content unavailable'
+  });
+  const evidenceKind=value=>Object.hasOwn(EVIDENCE_LABELS,value)?value:'saved';
+  function sourceAnalysisUrl(raw) {
+    try {
+      const url=new URL(raw);
+      if(url.protocol!=='https:'||url.username||url.password||url.port)return '';
+      if (['youtube.com','www.youtube.com','m.youtube.com','youtu.be','www.youtu.be'].includes(url.hostname)) {
+        const id=url.hostname.endsWith('youtu.be')?url.pathname.split('/')[1]:
+          url.pathname==='/watch'?url.searchParams.get('v'):url.pathname.match(/^\/(?:shorts|live|embed)\/([^/]+)/)?.[1];
+        return /^[A-Za-z0-9_-]{11}$/.test(id||'')?'https://www.youtube.com/watch?v='+id:'';
+      }
+      if(url.search)return '';
+      url.hash='';
+      return url.href;
+    } catch {return '';}
+  }
   function safeBrief(b) {
     if(!b||typeof b!=='object'||typeof b.summary!=='string')return null;
     const list=k=>Array.isArray(b[k])?b[k].filter(x=>typeof x==='string').slice(0,8).map(x=>x.slice(0,350)):[];
+    if(Array.isArray(b.sources)) {
+      const sources=b.sources.slice(0,12).flatMap(source=>
+        typeof source?.itemId==='string'&&source.itemId.length<=120&&
+        Number.isInteger(source.source)&&source.source>=1&&source.source<=12
+          ?[{itemId:source.itemId,source:source.source,kind:evidenceKind(source.kind)}]:[]);
+      const articleIds=new Set(sources.filter(s=>s.kind==='article').map(s=>s.source));
+      const citations=key=>Array.isArray(b[key])?b[key].slice(0,5).flatMap(entry=>
+        articleIds.has(entry?.source)&&typeof entry.text==='string'&&typeof entry.quote==='string'
+          ?[{text:entry.text.slice(0,260),source:entry.source,quote:entry.quote.slice(0,180)}]:[]):[];
+      const research=Array.isArray(b.research)?b.research.slice(0,6).flatMap(entry=>
+        typeof entry?.question==='string'&&typeof entry.research==='string'
+          ?[{question:entry.question.slice(0,240),research:entry.research.slice(0,260)}]:[]):[];
+      return {summary:b.summary.slice(0,900),findings:citations('findings'),tools:citations('tools'),
+        steps:citations('steps'),research,limitations:list('limitations'),sources,sourceCount:sources.length,
+        generated:typeof b.generated==='string'?b.generated.slice(0,40):''};
+    }
     return {
       summary:b.summary.slice(0,900),
       tools:list('tools'), steps:list('steps'), questions:list('questions'),
@@ -95,5 +133,5 @@
       'END:VEVENT','END:VCALENDAR',''
     ].join('\r\n');
   }
-  root.RepositoryProjects=Object.freeze({MAX_PROJECTS,NAME_LIMIT,PURPOSE_LIMIT,validDate,importance,ratingMatches,sanitize,safeBrief,calendar});
+  root.RepositoryProjects=Object.freeze({MAX_PROJECTS,NAME_LIMIT,PURPOSE_LIMIT,validDate,importance,ratingMatches,sanitize,safeBrief,calendar,sourceAnalysisUrl,evidenceKind,EVIDENCE_LABELS});
 })(typeof globalThis==='undefined'?self:globalThis);

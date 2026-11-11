@@ -91,6 +91,16 @@ The rating filter combines with existing text search and saved-date filtering **
 
 No new server routes, APIs, permissions or credentials are needed. The PWA shell cache bumps to v1.14; no reinstall is required. Regression tests cover all ten exact scores, inclusive custom ranges, preset bands, missing/invalid ratings and combined date/category/project results.
 
+## Intelligent Source Analysis (v1.15)
+
+**Prepare with AI** checks up to 12 project links in descending personal importance. It reads bounded excerpts from public HTTPS articles that allow extraction. It checks robots.txt on every destination, including redirects, and skips restricted pages, query-bearing article URLs, and social-platform scraping. YouTube videos and Shorts use the existing optional Data API snippet or the public oEmbed title fallback. Video descriptions are publisher metadata. Footage, audio and transcripts are outside this feature.
+
+The brief shows each selected link and the evidence available for it. Findings, tools and steps need a source reference and a matching quote from a readable article. A matching quote helps you inspect the evidence. Check the source's authority, context and applicability yourself. Technical questions pair with targeted searches or suggested primary documents. Repository does not run those searches. For the motorcycle coolant project, video-only evidence should lead to checking the exact model and year, fluid specification and capacity, service interval, and the manufacturer's procedure.
+
+The check runs when you select **Prepare with AI**. Cloudflare receives the selected public URLs for retrieval. Workers AI receives project details and bounded source text, with explicit web URLs redacted and personal link notes omitted. The brief and its short supporting quotes are saved locally and included in the existing backup format. Full retrieved excerpts are transient. **Why relevant?** retains its existing per-link saved-text workflow.
+
+No new Cloudflare binding is required. Verify the Pages deployment for the merged commit and run a brief with one public article, one YouTube Short, and a restricted link. Check the evidence labels and original-source links, then try the video-only coolant project. Automated tests use mocked fetches and Workers AI responses.
+
 ## Current scope
 
 - Android installed PWA appears in Share menu. Share URLs, optionally edit title, description, category or note, and return with Android Back.

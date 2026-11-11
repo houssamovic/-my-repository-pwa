@@ -19,7 +19,7 @@ test('project controls and source scripts are present on main page',()=>{
   assert.match(app,/function renderBrief/);
   assert.match(app,/function explainProjectLink/);
   assert.match(app,/projectAiBody\(p,'relevance',item\)/);
-  assert.match(app,/projectAiBody\(p,'brief'\)/);
+  assert.match(app,/mode:'source-brief'/);
 });
 test('Share Target receives rating and optional project without changing manifest',()=>{
   assert.match(receipt,/id="capture-project"/);
@@ -38,12 +38,12 @@ test('local, JSON and encrypted cloud snapshots include projects',()=>{
   assert.match(share,/version:1,exported:new Date\(\)\.toISOString\(\),categories,items,projects/);
   assert.match(app,/projects=projectModel\.sanitize\(data\.projects,safeItems\)/);
   assert.match(app,/projects=projectModel\.sanitize\(data\.projects,items\)/);
-  assert.match(sw,/repository-shell-v1-14-rating-filters/);
+  assert.match(sw,/repository-shell-v1-15-source-analysis/);
   assert.match(sw,/projects\.js/);
 });
 test('AI runs only after explicit user action and never receives recovery credentials',()=>{
   assert.match(app,/projectGenerate\.addEventListener\('click'/);
-  assert.match(app,/projectAiBody\(p,'brief'\)/);
+  assert.match(app,/mode:'source-brief'/);
   assert.match(app,/projectAiBody\(p,'relevance',item\)/);
   assert.ok(!read('functions/api/project-brief.js').includes('YOUTUBE_API_KEY'));
   assert.match(app,/project\.linkIds\.includes\(item\.id\)/);
