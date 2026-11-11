@@ -149,6 +149,7 @@
     else if (field === 'project') {
       const selected=projects.find(p=>p.id===ui.project.value);
       if(selected && !selected.linkIds.includes(active.id)){
+        if(selected.linkIds.length>=250){status('Link saved','Project already has 250 links. Select another project.');return;}
         selected.linkIds.push(active.id);selected.brief=null;
       }
     }
