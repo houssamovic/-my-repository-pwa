@@ -975,7 +975,7 @@
     if (saveData()) {ui.categoryDialog.close();render();showToast('Category created');}
   });
   $('export-button').addEventListener('click',()=>{
-    const blob=new Blob([JSON.stringify({version:1,exported:new Date().toISOString(),categories,items},null,2)],{type:'application/json'});
+    const blob=new Blob([JSON.stringify({version:1,exported:new Date().toISOString(),categories,items,projects},null,2)],{type:'application/json'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='repository-backup.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
   });
   $('import-input').addEventListener('change',async event=>{
@@ -987,11 +987,11 @@
       const data=JSON.parse(await file.text());
       if(data.version!==1 || !Array.isArray(data.items) || !Array.isArray(data.categories) || data.items.length>MAX_ITEMS) throw Error('Format');
       const safeCategories=[...new Set([...DEFAULT_CATEGORIES,...data.categories.filter(c=>typeof c==='string'&&c.length>0&&c.length<=45)])];
-      const safeItems=data.items.filter(e=>e && cleanUrl(e.url) && typeof e.title==='string' && typeof e.description==='string' && typeof e.category==='string').map(e=>({id:String(e.id||crypto.randomUUID()),url:cleanUrl(e.url),title:e.title.slice(0,250),description:e.description.slice(0,1200),note:String(e.note||'').slice(0,1200),category:safeCategories.includes(e.category)?e.category:'Unsorted',created:typeof e.created==='string' && Number.isFinite(Date.parse(e.created)) ? e.created : null}));
+      const safeItems=data.items.filter(e=>e && cleanUrl(e.url) && typeof e.title==='string' && typeof e.description==='string' && typeof e.category==='string').map(e=>({id:String(e.id||crypto.randomUUID()),url:cleanUrl(e.url),title:e.title.slice(0,250),description:e.description.slice(0,1200),note:String(e.note||'').slice(0,1200),category:safeCategories.includes(e.category)?e.category:'Unsorted',rating:projectModel.importance(e.rating),created:typeof e.created==='string' && Number.isFinite(Date.parse(e.created)) ? e.created : null}));
       if(!confirm(`Import ${safeItems.length} links? This replaces the current repository on this device.`)) return;
-      const oldItems=items,oldCategories=categories;
-      items=safeItems;categories=safeCategories;
-      if (!saveData()){items=oldItems;categories=oldCategories;return;}
+      const oldItems=items,oldCategories=categories,oldProjects=projects;
+      items=safeItems;categories=safeCategories;projects=projectModel.sanitize(data.projects,safeItems);
+      if (!saveData()){items=oldItems;categories=oldCategories;projects=oldProjects;return;}
       navigate();showToast('Backup imported');
     } catch {showToast('Invalid backup file');}
   });
@@ -1008,7 +1008,7 @@
   const cloudCopy = $('cloud-copy');
   const cloudDisconnect = $('cloud-disconnect');
   const vault = globalThis.RepositoryVault;
-  const backupSnapshot = () => ({version:1,exported:new Date().toISOString(),categories,items});
+  const backupSnapshot = () => ({version:1,exported:new Date().toISOString(),categories,items,projects});
   const vaultMessage = (message) => {cloudStatus.textContent=message;};
   function setVaultButtons(enabled) {
     cloudCreate.disabled=!enabled;
@@ -1055,9 +1055,10 @@
       const safeCategories=[...new Set([...DEFAULT_CATEGORIES,...data.categories.filter(c=>typeof c==='string'&&c.trim().length&&c.length<=45)])];
       const safeItems=data.items.filter(e=>e && cleanUrl(e.url)&&typeof e.title==='string'&&typeof e.description==='string'&&typeof e.category==='string').map(e=>({...e,id:String(e.id||crypto.randomUUID()),url:cleanUrl(e.url),title:e.title.slice(0,250),description:e.description.slice(0,1200),note:String(e.note||'').slice(0,1200),category:safeCategories.includes(e.category)?e.category:'Unsorted'}));
       if(!confirm(`Restore ${safeItems.length} links? This REPLACES your ${items.length} locally saved links on this device. Export a local backup first if you want to preserve them.`)) {vaultMessage('Restore cancelled.');return;}
-      const originalItems=items,originalCategories=categories;
-      items=safeItems;categories=safeCategories;
-      if(!saveData()){items=originalItems;categories=originalCategories;throw new Error('Not enough device storage');}
+      const originalItems=items,originalCategories=categories,originalProjects=projects;
+      items=safeItems.map(e=>({...e,rating:projectModel.importance(e.rating)}));
+      categories=safeCategories;projects=projectModel.sanitize(data.projects,items);
+      if(!saveData()){items=originalItems;categories=originalCategories;projects=originalProjects;throw new Error('Not enough device storage');}
       vault.remember(code,result.revision);
       localStorage.removeItem(CLOUD_DIRTY);
       recoveryInput.value='';
