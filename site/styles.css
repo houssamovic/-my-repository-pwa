@@ -60,3 +60,51 @@ dialog{border:none;border-radius:13px;background:#fff;box-shadow:0 24px 85px #1c
   .entry-saved-date{margin-top:5px}
 }
 @media(max-width:390px){.saved-date-filter input[type="date"]{max-width:140px;font-size:11px}}
+
+
+/* v1.13: projects as a purposeful, optional layer above topic categories. */
+#projects-section{margin-bottom:36px}
+.project-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.project-tile{display:flex;flex-direction:column;align-items:flex-start;gap:12px;text-align:left;min-width:0;background:#fff;border:1px solid var(--line);border-radius:9px;padding:20px;color:var(--ink)}
+.project-tile:hover{background:#fbfcf9;border-color:#bfc5bc}
+.project-tile-name{font-size:17px;font-weight:590;line-height:1.35;letter-spacing:-.3px;overflow-wrap:anywhere}
+.project-tile-meta,.project-ready{font-size:11px;color:#8a9186}
+.project-ready{border:1px solid #e5e7e2;border-radius:4px;padding:3px 7px}
+.project-empty{font-size:12px;color:#929790;line-height:1.6;margin:0}
+.project-tools{margin:0 0 26px}
+.project-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.project-toolbar .button{font-size:12px;padding:10px 13px}
+.project-toolbar .text-action{margin-left:auto}
+.project-toolbar .button:disabled{opacity:.5;cursor:not-allowed}
+.project-brief{margin-top:16px;background:#fff;border:1px solid var(--line);border-radius:9px;padding:22px;line-height:1.65}
+.project-brief-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.project-brief-heading strong{font-size:16px;letter-spacing:-.3px}
+.project-brief-meta,.project-brief-disclaimer{font-size:11px;color:#939a91}
+.project-brief-summary{font-size:13px;color:#474e45;line-height:1.7;margin:12px 0 18px}
+.project-brief-section{margin:15px 0}
+.project-brief-section h3{font-size:12px;color:#3f453d;font-weight:650;margin:0 0 6px}
+.project-brief-section ul{font-size:12px;color:#596057;padding-left:20px;margin:0;line-height:1.75}
+.project-brief-disclaimer{padding-top:12px;border-top:1px solid var(--line);margin-bottom:0}
+.entry-importance{color:#65715f;font-size:11px;margin-top:5px}
+.project-why{font-size:11px;white-space:nowrap}
+.project-link-insight{font-size:11px;color:#65715f;line-height:1.5;margin-top:7px}
+.project-privacy-note{color:#8a9188;font-size:11px;line-height:1.5}
+.project-picker-list{display:flex;flex-direction:column;gap:0;max-height:45vh;overflow-y:auto;border:1px solid var(--line);border-radius:8px;margin-top:13px}
+.project-picker-option{display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid #eeefeb;padding:11px;cursor:pointer}
+.project-picker-option:last-child{border-bottom:0}
+.project-picker-option input{flex:none;width:16px;height:16px;margin:2px 0}
+.project-picker-option span{min-width:0;display:flex;flex-direction:column;gap:4px}
+.project-picker-option strong{font-size:12px;font-weight:570;overflow-wrap:anywhere}
+.project-picker-option small{font-size:11px;color:#969c94}
+#project-picker-search{width:100%;border:1px solid #dfe2db;border-radius:7px;padding:12px;font-size:13px}
+@media(max-width:750px){
+  #projects-section{margin-bottom:28px}
+  .project-grid{gap:10px}
+  .project-tile{padding:15px;gap:10px}
+  .project-tile-name{font-size:14px}
+  .project-tile-meta{font-size:10px;line-height:1.5}
+  .project-toolbar .button{font-size:11px;padding:9px 10px}
+  .project-toolbar .text-action{font-size:11px}
+  .project-brief{padding:16px}
+}
+@media(max-width:360px){.project-grid{grid-template-columns:1fr}}
