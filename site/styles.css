@@ -134,8 +134,19 @@ dialog{border:none;border-radius:13px;background:#fff;box-shadow:0 24px 85px #1c
   .saved-rating-filter .rating-filter-fields{flex-basis:100%}
 }
 
-.checklist-add{display:block;color:#425540;font-weight:600;min-height:32px}
-.checklist-add[aria-disabled="true"]{color:#626962;cursor:default;text-decoration:none}
+.project-brief-section li:has(.checklist-add){padding-bottom:12px}
+.project-brief-section li:has(.checklist-add)+li:has(.checklist-add){border-top:1px solid var(--line);padding-top:12px}
+.checklist-add,.checklist-task-actions :is(button,a){
+  display:inline-flex;align-items:center;justify-content:center;min-height:44px;
+  padding:8px 12px;border:1px solid #aab7a8;border-radius:7px;
+  background:#fff;color:#304b34;font-size:13px;font-weight:600;line-height:1.25;text-decoration:none
+}
+.checklist-add{display:flex;width:fit-content;margin-top:7px;background:#36533b;border-color:#36533b;color:#fff}
+.checklist-add:hover:not([aria-disabled="true"]){background:#29442e;text-decoration:none}
+.checklist-add[aria-disabled="true"]{background:#eef2ed;border-color:transparent;color:#435746;cursor:default;text-decoration:none}
+.checklist-add:focus-visible,.checklist-task-actions :is(button,a):focus-visible{
+  outline:2px solid #36533b;outline-offset:2px
+}
 .project-checklist-list{list-style:none;padding:0;margin:12px 0 0}
 .project-checklist-task{border-top:1px solid var(--line);padding:10px 0;font-size:13px}
 .checklist-task-label{display:flex;align-items:flex-start;gap:8px;cursor:pointer}
@@ -143,4 +154,7 @@ dialog{border:none;border-radius:13px;background:#fff;box-shadow:0 24px 85px #1c
 .checklist-task-label input:checked+span{text-decoration:line-through}
 .checklist-task-detail,.checklist-task-actions{margin-left:26px}
 .checklist-task-detail{color:#596057;font-size:12px}
-.checklist-task-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px;font-size:12px}
+.checklist-task-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px}
+.checklist-task-actions :is(button,a):hover{background:#eef2ed;text-decoration:none}
+.checklist-task-actions button:nth-of-type(2){color:#833d35;border-color:#c8aaa5}
+.checklist-task-actions button:nth-of-type(2):hover{background:#f8eeec}
