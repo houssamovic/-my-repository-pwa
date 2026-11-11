@@ -7,6 +7,8 @@
   const CLOUD_DIRTY = 'repository-cloud-dirty-v1';
   let cloudTimer;
   const META_ENDPOINT = '/api/metadata';
+  const AI_ENDPOINT = '/api/classify';
+  const aiAttemptedInSession = new Set();
   const inFlightMetadata = new Set();
   const DEFAULT_CATEGORIES = ['DIY', 'Food & Recipes', 'Travel', 'Technology', 'Reading', 'Unsorted'];
   const MAX_ITEMS = 20000;
@@ -295,15 +297,50 @@
         if (/content not analyzed|shared link/i.test(found.description)) found.description = 'Details unavailable from source';
       }
       saveData(); render();
+      if(found.category==='Unsorted'&&!found.manualCategory)void classifyUnsorted(found.id);
     } catch {
       // A transient network failure is retried on the next online launch.
       if ((item.metaAttempts || 0) >= 3) { item.metaStatus = 'unavailable'; saveData(); render(); }
     } finally { inFlightMetadata.delete(id); }
   }
+  // Semantic classification is optional and uses only the public title and
+  // description, never notes, recovery codes, collections or the URL.
+  // It runs after metadata retrieval and also when the repository reopens:
+  // Android can terminate a Share Target before an async request completes.
+  async function classifyUnsorted(id) {
+    const item=items.find(e=>e.id===id);
+    if(!item || item.category!=='Unsorted' || item.manualCategory ||
+       item.aiChecked || aiAttemptedInSession.has(id) || !navigator.onLine) return;
+    const title=String(item.title||'').trim(), description=String(item.description||'').trim();
+    const usefulTitle=title.length>=8 && !/^(?:youtube|youtube (?:video|short)|instagram (?:post|reel)|x post|facebook post|saved link|link|youtu\.be|www\.youtube\.com)$/i.test(title);
+    const usefulDesc=description.length>=15 && !/^(?:shared link|saved link|details unavailable|description not provided|youtube ·|instagram ·)/i.test(description);
+    if(!usefulTitle&&!usefulDesc) return;
+    aiAttemptedInSession.add(id);
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),12000);
+    try {
+      const response=await fetch(AI_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({title:usefulTitle?title:'',description:usefulDesc?description:'',categories:categories.filter(c=>c!=='Unsorted')}),
+        signal:controller.signal,cache:'no-store'});
+      if(!response.ok) return; // AI not enabled, quota exceeded, or temporarily offline.
+      const result=await response.json();
+      const current=items.find(e=>e.id===id);
+      if(!current || current.category!=='Unsorted'||current.manualCategory||result.status!=='ok') return;
+      const category=String(result.category||'').trim();
+      if(category==='Unsorted') {current.aiChecked=true;saveData();return;}
+      if(!/^[\p{L}\p{N} &+'(),.-]{2,45}$/u.test(category))return;
+      if(!categories.includes(category))categories.splice(categories.length-1,0,category);
+      current.category=category;current.aiChecked=true;saveData();render();
+    } catch { /* best effort: retry next time user opens Repository */ }
+    finally {clearTimeout(timer);}
+  }
+
   function resumeMetadata() {
     if (!navigator.onLine) return;
     items.filter(e => e.metaStatus === 'pending' && (e.metaAttempts || 0) < 3)
       .slice(0,3).forEach(e => { void enrichItem(e.id); });
+    items.filter(e=>e.category==='Unsorted'&&!e.manualCategory&&!e.aiChecked)
+      .slice(0,3).forEach(e=>{void classifyUnsorted(e.id);});
   }
   function recordShare(params, status, detail) {
     // Store diagnostic metadata locally only. Do not persist shared text or full URLs.
@@ -405,7 +442,7 @@
   ui.retryDetails.addEventListener('click', () => {
     const found=items.find(e=>e.id===editedId);
     if (!found) return;
-    found.metaStatus='pending'; found.metaAttempts=0; found.manual=false;
+    found.metaStatus='pending'; found.metaAttempts=0; found.manual=false; found.aiChecked=false; aiAttemptedInSession.delete(found.id);
     saveData(); ui.entryDialog.close(); showToast('Checking link details…');
     void enrichItem(found.id);
   });
