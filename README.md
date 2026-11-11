@@ -13,6 +13,21 @@ Production URL: <https://my-repository-pwa.pages.dev/>. GitHub source: `houssamo
 - No client-side PWA code, manifest ID, Android share target, local storage or cloud vault credentials changed. No reinstall necessary. Existing entries can be rechecked using **Edit details → Refresh details**.
 - Tests: \`node --test tests/*.test.mjs\`.
 
+## Optional semantic AI categorization
+
+**Why:** Metadata extraction alone does not understand a video. Previous rule-based classification only matched hard-coded phrases, so many links were still placed in Unsorted even when their titles were readable.
+
+**Activation:**
+1. Cloudflare Dashboard → Workers & Pages → **my-repository-pwa (Pages)** → **Settings → Bindings** → **Add → Workers AI**.
+2. Set the binding name to **AI** and save it for **Production**.
+3. Redeploy the latest production commit so the binding is available.
+4. Close/reopen the installed Repository PWA (no uninstall), and reopen the homepage to recheck up to three existing Unsorted items per session.
+5. Share a public YouTube video with a readable title. The share receipt can say "Categorization pending": processing may finish once Repository is next opened if Android closed the sharing window.
+
+When the **AI** binding is absent, no AI inference happens and classification falls back to existing rules. Only public title and description are sent for classification, not link URLs, notes, other saved items, or backup codes. The /api/classify endpoint is currently unauthenticated and can be abused; add Cloudflare WAF/rate limiting and monitor the Workers AI quota **before public launch**. The free tier has a finite inference allowance. A model does not have access to the content of videos: if no trustworthy title or description can be retrieved, links remain Unsorted rather than being guessed at. Manually chosen categories are never automatically overwritten.
+
+**Testing:** run node --test tests/*.test.mjs. Tests cover label validation and safe fallback but actual Cloudflare Workers AI output still requires live verification.
+
 ## Current scope
 
 - Android installed PWA appears in Share menu. Share URLs, optionally edit title, description, category or note, and return with Android Back.
