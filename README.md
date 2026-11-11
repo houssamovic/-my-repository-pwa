@@ -101,6 +101,10 @@ The check runs when you select **Prepare with AI**. Cloudflare receives the sele
 
 No new Cloudflare binding is required. Verify the Pages deployment for the merged commit and run a brief with one public article, one YouTube Short, and a restricted link. Check the evidence labels and original-source links, then try the video-only coolant project. Automated tests use mocked fetches and Workers AI responses.
 
+## Preparation checklist (v1.16)
+
+Open a project with a preparation brief and choose **Add to checklist** on a research question or a source-backed finding, tool or step. The task keeps its research suggestion or original source link when available. Edit the task wording, mark it complete, or remove it from the project’s checklist. A saved task keeps its edits and progress when the brief is regenerated. Tasks stay in the project and are included in the existing JSON and encrypted cloud backups.
+
 ## Current scope
 
 - Android installed PWA appears in Share menu. Share URLs, optionally edit title, description, category or note, and return with Android Back.

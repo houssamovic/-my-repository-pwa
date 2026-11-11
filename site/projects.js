@@ -90,6 +90,29 @@
       sourceCount:Number.isInteger(b.sourceCount)?Math.min(b.sourceCount,12):0
     };
   }
+  const MAX_TASKS=100;
+  function checklistCandidate(section,line,sourceId=''){
+    if(!['findings','tools','steps','questions','research'].includes(section))return null;
+    if(['findings','tools','steps'].includes(section)&&!sourceId)return null;
+    const text=typeof line==='string'?line:line?.question||line?.text;
+    if(typeof text!=='string'||!text.trim())return null;
+    const title=text.trim().slice(0,350);
+    return {title,sourceId,origin:JSON.stringify([title,sourceId]),
+      detail:typeof line?.research==='string'?line.research.slice(0,260):''};
+  }
+  function safeChecklist(value,known){
+    if(!Array.isArray(value))return [];
+    const seen=new Set();
+    return value.slice(0,MAX_TASKS).flatMap(task=>{
+      if(typeof task?.id!=='string'||!task.id||task.id.length>120||seen.has(task.id)||
+         typeof task.title!=='string'||!task.title.trim())return [];
+      seen.add(task.id);
+      return [{id:task.id,title:task.title.trim().slice(0,350),done:task.done===true,
+        detail:typeof task.detail==='string'?task.detail.slice(0,260):'',
+        origin:typeof task.origin==='string'?task.origin.slice(0,3000):'',
+        sourceId:known.has(task.sourceId)?task.sourceId:''}];
+    });
+  }
   function sanitize(value,items) {
     const known=new Set(items.map(x=>x.id).filter(x=>typeof x==='string'));
     if(!Array.isArray(value))return [];
@@ -112,7 +135,7 @@
         purpose:typeof entry.purpose==='string'?entry.purpose.trim().slice(0,PURPOSE_LIMIT):'',
         date:validDate(entry.date)?entry.date:'',
         created:typeof entry.created==='string'&&Number.isFinite(Date.parse(entry.created))?entry.created:new Date().toISOString(),
-        linkIds:links,brief:safeBrief(entry.brief),insights
+        linkIds:links,brief:safeBrief(entry.brief),insights,checklist:safeChecklist(entry.checklist,known)
       }];
     });
   }
@@ -133,5 +156,5 @@
       'END:VEVENT','END:VCALENDAR',''
     ].join('\r\n');
   }
-  root.RepositoryProjects=Object.freeze({MAX_PROJECTS,NAME_LIMIT,PURPOSE_LIMIT,validDate,importance,ratingMatches,sanitize,safeBrief,calendar,sourceAnalysisUrl,evidenceKind,EVIDENCE_LABELS});
+  root.RepositoryProjects=Object.freeze({MAX_PROJECTS,NAME_LIMIT,PURPOSE_LIMIT,validDate,importance,ratingMatches,sanitize,safeBrief,calendar,sourceAnalysisUrl,evidenceKind,EVIDENCE_LABELS,MAX_TASKS,checklistCandidate});
 })(typeof globalThis==='undefined'?self:globalThis);
