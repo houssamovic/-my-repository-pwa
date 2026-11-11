@@ -132,11 +132,11 @@
       const response=await fetch(AI_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({title:usefulTitle?title:'',description:usefulDesc?description:'',categories:categories.filter(c=>c!=='Unsorted')}),
         signal:ctrl.signal,cache:'no-store'});
-      if(!response.ok)return; // Optional AI binding is not configured or unavailable.
+      if(!response.ok){status('Link saved','Automatic sorting unavailable · Saved in Unsorted');return;} // Optional AI binding is not configured or unavailable.
       const result=await response.json();
       if(item.manualCategory || item.category!=='Unsorted'||result.status!=='ok')return;
       const category=String(result.category||'').trim();
-      if(category==='Unsorted'){item.aiChecked=true;persist();return;}
+      if(category==='Unsorted'){item.aiChecked=true;persist();status('Link saved','No clear topic detected · Saved in Unsorted');return;}
       if(!/^[\p{L}\p{N} &+'(),.-]{2,45}$/u.test(category))return;
       if(!categories.includes(category))categories.splice(categories.length-1,0,category);
       item.category=category;item.aiChecked=true;persist();
@@ -166,7 +166,7 @@
         item.metaStatus='unavailable';
         if (/content not analyzed/i.test(item.description)) item.description='Details unavailable from source';
       }
-      persist();status('Link saved',item.category==='Unsorted'?'Link saved · Organizing…':'Saved to '+item.category);
+      persist();status('Link saved',item.category==='Unsorted'?'Checking the category…':'Saved to '+item.category);
       if(item.category==='Unsorted')void classifyUnsorted(item);
     } catch {} finally {clearTimeout(timer);}
   }
@@ -189,7 +189,7 @@
       created:new Date().toISOString(),metaStatus:'pending',metaAttempts:0,manual:false,manualCategory:false};
     items.unshift(item);
     if(!persist()) {items.shift();fail('Could not save the link to device storage.');return;}
-    renderFields(item);status('Link saved',item.category==='Unsorted'?'Saved · Organizing in the background':`Saved to ${item.category} · Edit anything below`);
+    renderFields(item);status('Link saved',item.category==='Unsorted'?'Saved · Categorization pending':`Saved to ${item.category} · Edit anything below`);
     logShare(params,'Saved',`${sourceKind(item.url)} → ${item.category}`);
     void enrichMetadata(item);
   }
