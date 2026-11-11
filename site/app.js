@@ -318,7 +318,7 @@
     if(!item || item.category!=='Unsorted' || item.manualCategory ||
        item.aiChecked || aiAttemptedInSession.has(id) || !navigator.onLine) return;
     const title=String(item.title||'').trim(), description=String(item.description||'').trim();
-    const usefulTitle=title.length>=8 && !/^(?:youtube|youtube (?:video|short)|instagram (?:post|reel)|x post|facebook post|saved link|link|youtu\.be|www\.youtube\.com)$/i.test(title);
+    const usefulTitle=title.length>=8 && !/^(?:youtube|youtube (?:video|short)|instagram (?:post|reel)|x post|facebook post|saved link|link|youtu\.be|(?:www\.|m\.)?youtube\.com|(?:www\.)?instagram\.com|(?:www\.)?(?:x|twitter)\.com)$/i.test(title);
     const usefulDesc=description.length>=15 && !/^(?:shared link|saved link|details unavailable|description not provided|youtube ·|instagram ·)/i.test(description);
     if(!usefulTitle&&!usefulDesc) return;
     aiAttemptedInSession.add(id);
@@ -346,7 +346,7 @@
   function canClassify(item) {
     if(!item || item.category!=='Unsorted'||item.manualCategory||item.aiChecked)return false;
     const title=String(item.title||'').trim(),description=String(item.description||'').trim();
-    const titleUseful=title.length>=8&&!/^(?:youtube|youtube (?:video|short)|instagram (?:post|reel)|x post|facebook post|saved link|link|youtu\.be|www\.youtube\.com)$/i.test(title);
+    const titleUseful=title.length>=8&&!/^(?:youtube|youtube (?:video|short)|instagram (?:post|reel)|x post|facebook post|saved link|link|youtu\.be|(?:www\.|m\.)?youtube\.com|(?:www\.)?instagram\.com|(?:www\.)?(?:x|twitter)\.com)$/i.test(title);
     const descUseful=description.length>=15&&!/^(?:shared link|saved link|details unavailable|description not provided|youtube ·|instagram ·)/i.test(description);
     return titleUseful||descUseful;
   }
