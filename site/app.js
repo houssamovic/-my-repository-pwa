@@ -11,6 +11,8 @@
   const aiAttemptedInSession = new Set();
   const MAX_AI_ATTEMPTS_PER_SESSION = 12;
   let aiRequestsInFlight = 0;
+  let aiBindingAvailable = null;
+  let aiCheckInFlight = null;
   const inFlightMetadata = new Set();
   const DEFAULT_CATEGORIES = ['DIY', 'Food & Recipes', 'Travel', 'Technology', 'Reading', 'Unsorted'];
   const MAX_ITEMS = 20000;
@@ -350,8 +352,31 @@
     const descUseful=description.length>=15&&!/^(?:shared link|saved link|details unavailable|description not provided|youtube ·|instagram ·)/i.test(description);
     return titleUseful||descUseful;
   }
+  async function checkAiConnection(force=false) {
+    if(!navigator.onLine)return false;
+    if(aiCheckInFlight)return aiCheckInFlight;
+    if(!force && aiBindingAvailable!==null)return aiBindingAvailable;
+    aiCheckInFlight=(async()=>{
+      try{
+        const response=await fetch(AI_ENDPOINT,{cache:'no-store'});
+        const status=response.ok?await response.json():null;
+        return status?.available===true;
+      }catch{return false;}
+    })();
+    try {aiBindingAvailable=await aiCheckInFlight;return aiBindingAvailable;}
+    finally {aiCheckInFlight=null;}
+  }
   function queueUnsorted() {
     if(!navigator.onLine) return;
+    if(aiBindingAvailable===null) {
+      void checkAiConnection().then(available=>{
+        if(available)queueUnsorted();
+        else if(currentCategory==='Unsorted')
+          ui.organizeStatus.textContent='AI sorting is not connected. Use Organize now to check again.';
+      });
+      return;
+    }
+    if(!aiBindingAvailable)return;
     const remaining=Math.min(2-aiRequestsInFlight,MAX_AI_ATTEMPTS_PER_SESSION-aiAttemptedInSession.size);
     if(remaining<=0)return;
     items.filter(e=>canClassify(e)&&!aiAttemptedInSession.has(e.id))
@@ -368,9 +393,8 @@
     ui.organizeStatus.hidden=false;
     ui.organizeStatus.textContent='Checking automatic classification…';
     try {
-      const response=await fetch(AI_ENDPOINT,{cache:'no-store'});
-      const state=response.ok?await response.json():null;
-      if(!state?.available) {
+      const available=await checkAiConnection(true);
+      if(!available) {
         ui.organizeStatus.textContent='AI categorization is not active. Add the AI binding in Cloudflare Pages and redeploy.';
         return;
       }
@@ -626,7 +650,7 @@
       }).catch(()=>{});
     });
   }
-  window.addEventListener('online', () => {resumeMetadata();scheduleCloudBackup();});
+  window.addEventListener('online', () => {aiBindingAvailable=null;resumeMetadata();scheduleCloudBackup();});
   document.addEventListener('visibilitychange', () => { if (!document.hidden) resumeMetadata(); });
   resumeMetadata();
   if (vault.recovery() && localStorage.getItem(CLOUD_DIRTY)) scheduleCloudBackup();
