@@ -327,7 +327,7 @@
        item.aiChecked || aiAttemptedInSession.has(id) || !navigator.onLine) return;
     const title=String(item.title||'').trim(), description=String(item.description||'').trim();
     const usefulTitle=title.length>=8 && !/^(?:youtube|youtube (?:video|short)|instagram (?:post|reel)|x post|facebook post|saved link|link|youtu\.be|(?:www\.|m\.)?youtube\.com|(?:www\.)?instagram\.com|(?:www\.)?(?:x|twitter)\.com)$/i.test(title);
-    const usefulDesc=description.length>=15 && !/^(?:shared link|saved link|details unavailable|description not provided|youtube ·|instagram ·)/i.test(description);
+    const usefulDesc=description.length>=15 && !/^(?:(?:youtube(?: (?:video|short))?|instagram(?: (?:reel|post))?|facebook(?: post)?|tiktok(?: video)?)\s*[·|:-]\s*)?(?:shared link|saved link|details unavailable|description not provided)/i.test(description);
     if(!usefulTitle&&!usefulDesc) return;
     aiAttemptedInSession.add(id);
     aiRequestsInFlight++;
@@ -356,7 +356,7 @@
     if(!item || item.category!=='Unsorted'||item.manualCategory||item.aiChecked)return false;
     const title=String(item.title||'').trim(),description=String(item.description||'').trim();
     const titleUseful=title.length>=8&&!/^(?:youtube|youtube (?:video|short)|instagram (?:post|reel)|x post|facebook post|saved link|link|youtu\.be|(?:www\.|m\.)?youtube\.com|(?:www\.)?instagram\.com|(?:www\.)?(?:x|twitter)\.com)$/i.test(title);
-    const descUseful=description.length>=15&&!/^(?:shared link|saved link|details unavailable|description not provided|youtube ·|instagram ·)/i.test(description);
+    const descUseful=description.length>=15&&!/^(?:(?:youtube(?: (?:video|short))?|instagram(?: (?:reel|post))?|facebook(?: post)?|tiktok(?: video)?)\s*[·|:-]\s*)?(?:shared link|saved link|details unavailable|description not provided)/i.test(description);
     return titleUseful||descUseful;
   }
   async function checkAiConnection(force=false) {
@@ -401,20 +401,34 @@
     ui.organizeStatus.textContent='Checking automatic classification…';
     try {
       const available=await checkAiConnection(true);
-      if(!available) {
-        ui.organizeStatus.textContent='AI categorization is not active. Add the AI binding in Cloudflare Pages and redeploy.';
-        return;
+      // Re-fetch descriptions for a bounded batch of previously opaque videos.
+      // This is especially valuable after adding the optional YouTube API key.
+      const missing=items.filter(e=>{
+        if(e.category!=='Unsorted'||e.manual||e.manualCategory||canClassify({...e,aiChecked:false}))return false;
+        try {
+          const host=new URL(e.url).hostname.toLowerCase();
+          return /^(?:www\.|m\.)?(?:youtube\.com|instagram\.com)$/.test(host)||/^(?:www\.)?youtu\.be$/.test(host);
+        }catch{return false;}
+      }).slice(0,5);
+      for(const e of missing) {
+        e.metaStatus='pending';e.metaAttempts=0;e.aiChecked=false;
+        aiAttemptedInSession.delete(e.id);
+      }
+      if(missing.length) {
+        saveData();
+        missing.forEach(e=>{void enrichItem(e.id);});
       }
       const eligible=items.filter(e=>e.category==='Unsorted'&&!e.manualCategory&&canClassify({...e,aiChecked:false}));
-      if(!eligible.length){
-        ui.organizeStatus.textContent='Nothing to classify yet. These links need a meaningful title or description.';
-        return;
+      if(available) {
+        for(const e of eligible){e.aiChecked=false;aiAttemptedInSession.delete(e.id);}
+        saveData();
+        queueUnsorted();
+        ui.organizeStatus.textContent='Checking '+eligible.length+' readable links'+(missing.length?' and refreshing '+missing.length+' video links.':'.');
+      } else if(missing.length) {
+        ui.organizeStatus.textContent='Refreshing '+missing.length+' videos. AI sorting is not connected, so only basic categorization is available.';
+      } else {
+        ui.organizeStatus.textContent='AI sorting is not connected. Add the AI binding in Cloudflare Pages; videos without descriptions cannot be classified reliably.';
       }
-      // Explicit user request allows retrying items previously marked ambiguous.
-      for(const e of eligible){e.aiChecked=false;aiAttemptedInSession.delete(e.id);}
-      saveData();
-      ui.organizeStatus.textContent='Organizing up to '+Math.min(MAX_AI_ATTEMPTS_PER_SESSION,eligible.length)+' links. Categories will update here.';
-      queueUnsorted();
     } catch {
       ui.organizeStatus.textContent='Cannot reach automatic categorization. Check the connection and retry.';
     } finally {
