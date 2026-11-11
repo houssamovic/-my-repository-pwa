@@ -3,6 +3,9 @@
 
   const ITEMS_KEY = 'repository-v1-items';
   const CATEGORIES_KEY = 'repository-v1-categories';
+  const PROJECTS_KEY = 'repository-v1-projects';
+  const PROJECT_AI_ENDPOINT = '/api/project-brief';
+  const projectModel = globalThis.RepositoryProjects;
   const SHARE_LOG_KEY = 'repository-v12-share-log';
   const CLOUD_DIRTY = 'repository-cloud-dirty-v1';
   let cloudTimer;
@@ -32,6 +35,16 @@
     toast: $('toast'), entryDialog: $('entry-dialog'), entryForm: $('entry-form'),
     dialogHeading: $('dialog-heading'), entryUrl: $('entry-url'), entryTitle: $('entry-title'),
     entryDescription: $('entry-description'), entryNote: $('entry-note'), entryCategory: $('entry-category'),
+    entryProject: $('entry-project'), entryRating: $('entry-rating'),
+    projectsSection: $('projects-section'), projectGrid: $('project-grid'), projectEmpty: $('project-empty'),
+    projectTools: $('project-tools'), projectBrief: $('project-brief'), projectStatus: $('project-status'),
+    projectGenerate: $('project-generate'), projectAddLinks: $('project-add-links'),
+    projectCalendar: $('project-calendar'), projectEdit: $('project-edit'),
+    projectDialog: $('project-dialog'), projectDialogTitle: $('project-dialog-title'),
+    projectForm: $('project-form'), projectName: $('project-name'),
+    projectPurpose: $('project-purpose'), projectDate: $('project-date'),
+    projectDelete: $('project-delete'), projectPicker: $('project-picker-dialog'),
+    projectPickerSearch: $('project-picker-search'), projectPickerList: $('project-picker-list'),
     deleteEntry: $('delete-entry'), retryDetails: $('retry-details'), categoryDialog: $('category-dialog'),
     shareDiagnosticsDialog: $('share-diagnostics-dialog'), shareDiagnosticsList: $('share-diagnostics-list'),
     categoryName: $('category-name'), categoryForm: $('category-form')
@@ -47,6 +60,8 @@
   if (!Array.isArray(items)) items = [];
   categories = [...new Set([...DEFAULT_CATEGORIES.filter(c => c !== 'Unsorted'), ...categories.filter(c => typeof c === 'string' && c !== 'Unsorted' && c.trim().length && c.length <= 45), 'Unsorted'])];
   items = items.filter(e => e && typeof e === 'object' && typeof e.url === 'string' && typeof e.title === 'string' && typeof e.category === 'string');
+  for(const item of items)item.rating=projectModel.importance(item.rating);
+  let projects=projectModel.sanitize(readJSON(PROJECTS_KEY,[]),items);
   // Non-destructive migration: retry metadata for old placeholder entries.
   for (const e of items) {
     if (!e.metaStatus && /shared link \(content not analyzed\)|saved link \(content not analyzed\)/i.test(e.description || '')) {
@@ -61,6 +76,9 @@
     }
   }
   let currentCategory = null;
+  let currentProjectId = null;
+  let editingProjectId = null;
+  let projectSelectedByUser = false;
   let savedDateFilter = {mode:'all',day:'',start:'',end:''};
   let editedId = null;
   let categorySelectedByUser = false;
@@ -70,6 +88,7 @@
     try {
       localStorage.setItem(ITEMS_KEY, JSON.stringify(items));
       localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+      localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
       if (globalThis.RepositoryVault?.recovery()) { localStorage.setItem(CLOUD_DIRTY,crypto.randomUUID()); scheduleCloudBackup(); }
       return true;
     } catch {
@@ -83,7 +102,7 @@
       if(!navigator.onLine || !globalThis.RepositoryVault?.recovery())return;
       try {
         const token=localStorage.getItem(CLOUD_DIRTY);
-        await globalThis.RepositoryVault.backUp({version:1,exported:new Date().toISOString(),categories,items});
+        await globalThis.RepositoryVault.backUp({version:1,exported:new Date().toISOString(),categories,items,projects});
         if (localStorage.getItem(CLOUD_DIRTY)===token) localStorage.removeItem(CLOUD_DIRTY);
         else scheduleCloudBackup();
       } catch { /* The local copy is safe; retry on next online launch. */ }
@@ -176,7 +195,7 @@
     const title = String(data.title || defaultTitle(url)).trim().slice(0,250) || defaultTitle(url);
     const description = String(data.description || `${sourceKind(url)} · Shared link (content not analyzed)`).trim().slice(0,1200);
     const category = forcedCategory !== 'Auto' && categories.includes(forcedCategory) ? forcedCategory : inferCategory(title, description, url);
-    const entry = {id: (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random()}`), url, title, description, category, created: new Date().toISOString(),
+    const entry = {id: (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random()}`), url, title, description, category, rating:null, created: new Date().toISOString(),
       metaStatus: data.autoMetadata ? 'pending' : 'manual', metaAttempts: 0, manual: false,
       manualCategory: forcedCategory !== 'Auto' && categories.includes(forcedCategory)};
     items.unshift(entry);
@@ -205,6 +224,8 @@
     // The title is a real link, not an edit button. Keep the PWA in place by opening externally.
     const title=tag('a',{className:'entry-title',href:item.url,target:'_blank',rel:'noopener noreferrer',title:'Open original source'},item.title);
     titleCell.append(title,tag('div',{className:'entry-saved-date'},dates.label(item.created)));
+    if(projectModel.importance(item.rating)!==null)
+      titleCell.append(tag('div',{className:'entry-importance'},'Importance '+item.rating+'/10'));
     const descCell=tag('div',{className:'entry-cell entry-description'});
     descCell.append(tag('span',{className:'entry-kind'},sourceKind(item.url)),document.createTextNode(item.description));
     if (item.note) descCell.append(tag('div',{className:'entry-personal-note'},`Note: ${item.note}`));
@@ -214,6 +235,13 @@
     const edit=tag('button',{className:'entry-edit',type:'button',title:'Edit title, description, category, or note'},'Edit details');
     edit.addEventListener('click',()=>openEntryDialog(item));
     actions.append(link,edit);
+    const project=projects.find(p=>p.id===currentProjectId);
+    if(project && project.linkIds.includes(item.id)) {
+      const relevance=tag('button',{type:'button',className:'text-action project-why'},'Why relevant?');
+      relevance.addEventListener('click',()=>{void explainProjectLink(project.id,item.id,relevance);});
+      actions.append(relevance);
+      if(project.insights?.[item.id])linkCell.append(tag('div',{className:'project-link-insight'},project.insights[item.id]));
+    }
     linkCell.append(actions);
     row.append(titleCell,descCell,linkCell);
     return row;
