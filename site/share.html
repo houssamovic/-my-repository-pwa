@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/share-receiver.css">
   <script defer src="/classifier.js"></script>
   <script defer src="/cloud-vault.js"></script>
+  <script defer src="/projects.js"></script>
   <script defer src="/share-receiver.js"></script>
   <title>Link saved · Repository</title>
 </head>
@@ -40,6 +41,10 @@
           <div class="capture-link-row"><input id="capture-url" type="url" readonly aria-label="Original link"/><a id="capture-open-link" href="#" rel="noopener noreferrer" target="_blank" aria-label="Open original link">↗</a></div>
         </div>
         <label class="capture-field" for="capture-category"><span>Category</span><select id="capture-category"></select></label>
+        <label class="capture-field" for="capture-project"><span>Add to project <small>(optional)</small></span><select id="capture-project"></select></label>
+        <label class="capture-field" for="capture-rating"><span>Importance <small>(optional)</small></span>
+          <select id="capture-rating"><option value="">Not rated</option><option value="1">1 / 10</option><option value="2">2 / 10</option><option value="3">3 / 10</option><option value="4">4 / 10</option><option value="5">5 / 10</option><option value="6">6 / 10</option><option value="7">7 / 10</option><option value="8">8 / 10</option><option value="9">9 / 10</option><option value="10">10 / 10</option></select>
+        </label>
         <label class="capture-field" for="capture-note"><span>Your note <small>(optional)</small></span>
           <textarea id="capture-note" rows="2" maxlength="1200" placeholder="Add anything you want to remember…"></textarea>
         </label>
