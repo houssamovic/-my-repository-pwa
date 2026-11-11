@@ -24,6 +24,7 @@
     entries: $('entries-section'), list: $('entries-list'), listHeading: $('list-heading'),
     resultCount: $('result-count'), empty: $('empty-message'),
     organizeButton: $('organize-unsorted-button'), organizeStatus: $('organize-status'),
+    refreshDescriptionsButton: $('refresh-descriptions-button'), refreshDescriptionsStatus: $('refresh-descriptions-status'),
     toast: $('toast'), entryDialog: $('entry-dialog'), entryForm: $('entry-form'),
     dialogHeading: $('dialog-heading'), entryUrl: $('entry-url'), entryTitle: $('entry-title'),
     entryDescription: $('entry-description'), entryNote: $('entry-note'), entryCategory: $('entry-category'),
@@ -228,10 +229,29 @@
     ui.list.append(header);
     results.forEach(e=>ui.list.append(makeEntryRow(e)));
   }
+  // Old YouTube links can already be in a category even though the app
+  // previously saved "Details unavailable from source". Do not require
+  // Unsorted or reset their category to refresh a creator-written description.
+  function youtubeLink(url) {
+    try {
+      const host=new URL(url).hostname.toLowerCase().replace(/^(?:www\.|m\.)/,'');
+      return host==='youtube.com'||host==='youtu.be';
+    } catch {return false;}
+  }
+  function missingDescription(value) {
+    const description=String(value||'').trim();
+    if(!description)return true;
+    return /^(?:details unavailable from source|description not provided by source|(?:(?:youtube (?:video|short))\s*[·:|-]\s*)?(?:shared link|saved link) \(content not analyzed\))$/i.test(description);
+  }
+  function pendingYouTubeDescriptions(category) {
+    return items.filter(e=>e.category===category && youtubeLink(e.url) && missingDescription(e.description));
+  }
   function render() {
     const query=ui.search.value.trim().toLowerCase();
     ui.organizeButton.hidden=currentCategory!=='Unsorted';
     ui.organizeStatus.hidden=currentCategory!=='Unsorted';
+    ui.refreshDescriptionsButton.hidden=!currentCategory||pendingYouTubeDescriptions(currentCategory).length===0;
+    if(!currentCategory)ui.refreshDescriptionsStatus.hidden=true;
     if (currentCategory) {
       ui.eyebrow.textContent='CATEGORY'; ui.title.textContent=currentCategory;
       ui.subtitle.textContent='Your saved material, without the clutter.';
@@ -255,7 +275,7 @@
     }
   }
   function matches(e,q) { return !q || [e.title,e.description,e.url,e.category,e.note||''].join(' ').toLowerCase().includes(q); }
-  function navigate(category=null) { currentCategory=category;ui.search.value='';render();window.scrollTo({top:0,behavior:'instant'}); }
+  function navigate(category=null) { currentCategory=category;ui.search.value='';ui.refreshDescriptionsStatus.hidden=true;ui.refreshDescriptionsStatus.textContent='';render();window.scrollTo({top:0,behavior:'instant'}); }
   function populateCategorySelect(selected='Auto') {
     ui.entryCategory.replaceChildren();
     ui.entryCategory.append(tag('option',{value:'Auto'},'Automatic (basic rules)'));
@@ -395,6 +415,69 @@
       .slice(0,3).forEach(e => { void enrichItem(e.id); });
     queueUnsorted();
   }
+  ui.refreshDescriptionsButton.addEventListener('click',async()=>{
+    if(!currentCategory || ui.refreshDescriptionsButton.disabled)return;
+    const category=currentCategory;
+    const targets=pendingYouTubeDescriptions(category).slice(0,10);
+    if(!targets.length){render();return;}
+    ui.refreshDescriptionsButton.disabled=true;
+    ui.refreshDescriptionsStatus.hidden=false;
+    let updated=0,completed=0;
+    const diagnostics=new Set();
+    ui.refreshDescriptionsStatus.textContent='Checking YouTube descriptions for '+targets.length+' saved links…';
+    try {
+      // Two requests at a time; explicit retries only, to protect quota.
+      for(let offset=0;offset<targets.length;offset+=2) {
+        await Promise.all(targets.slice(offset,offset+2).map(async item=>{
+          const savedDescription=item.description;
+          const savedUrl=item.url;
+          const controller=new AbortController();
+          const timer=setTimeout(()=>controller.abort(),10000);
+          try {
+            const params=new URLSearchParams({url:savedUrl,diagnostic:'1'});
+            const response=await fetch(META_ENDPOINT+'?'+params.toString(),{cache:'no-store',signal:controller.signal});
+            if(!response.ok){diagnostics.add('network_error');return;}
+            const data=await response.json();
+            if(data?.diagnostic?.youtubeApi)diagnostics.add(data.diagnostic.youtubeApi);
+            const received=String(data?.description||'').trim().slice(0,1200);
+            const latest=items.find(x=>x.id===item.id);
+            if(!latest || latest.url!==savedUrl || latest.description!==savedDescription || !missingDescription(latest.description))return;
+            if(received && !missingDescription(received)){
+              latest.description=received;latest.metaStatus='done';latest.metaAttempts=0;
+              if(latest.category==='Unsorted'&&!latest.manualCategory) {
+                const inferred=inferCategory(latest.title,latest.description,latest.url);
+                if(inferred!=='Unsorted')latest.category=inferred;
+                else {latest.aiChecked=false;aiAttemptedInSession.delete(latest.id);}
+              }
+              updated++;
+              saveData();
+            }
+          } catch {diagnostics.add('network_error');}
+          finally {clearTimeout(timer);completed++;}
+        }));
+        if(currentCategory===category){
+          render();
+          ui.refreshDescriptionsStatus.hidden=false;
+          ui.refreshDescriptionsStatus.textContent='Checked '+completed+' of '+targets.length+' links; '+updated+' descriptions retrieved.';
+        }
+      }
+      if(currentCategory===category){
+        const remaining=pendingYouTubeDescriptions(category).length;
+        let explanation='';
+        if(diagnostics.has('not_configured'))explanation=' YouTube API is not enabled in this Pages deployment. Check the YOUTUBE_API_KEY secret and redeploy.';
+        else if(diagnostics.has('rejected_or_quota')||diagnostics.has('unauthorized'))explanation=' Google rejected the API request or quota was exceeded. Check the API key restrictions and quota in Google Cloud.';
+        else if(diagnostics.has('rate_limited'))explanation=' YouTube API rate limit reached.';
+        else if(diagnostics.has('creator_description_empty'))explanation=' Some videos have no creator-written description.';
+        else if(diagnostics.has('video_not_available'))explanation=' Some videos are not accessible through the public YouTube API.';
+        else if(diagnostics.has('network_error')||diagnostics.has('request_failed'))explanation=' YouTube metadata requests failed. Check the Cloudflare deployment and connection.';
+        else if(!updated)explanation=' The source did not provide a description for these videos.';
+        ui.refreshDescriptionsStatus.textContent='Retrieved '+updated+' of '+targets.length+' missing descriptions.'+explanation+(remaining>0?' '+remaining+' still need descriptions.':'');
+        render();
+        ui.refreshDescriptionsStatus.hidden=false;
+        queueUnsorted();
+      }
+    }finally{ui.refreshDescriptionsButton.disabled=false;}
+  });
   ui.organizeButton.addEventListener('click',async()=>{
     ui.organizeButton.disabled=true;
     ui.organizeStatus.hidden=false;
