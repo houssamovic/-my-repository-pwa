@@ -83,6 +83,14 @@ Inside each project users can **Prepare with AI** on demand. With the existing C
 
 **How to test:** Create a project such as “Repair bedroom drywall,” set a target date, add saved links, then choose **Prepare with AI**. Edit a link to add a private importance score or attach it to a project. Export JSON and verify that the \`projects\` array is included. Open the Android Share receipt and optionally assign a link to a project. For date-based reminders, download and import the calendar event. Run \`node --test tests/*.test.mjs\` for regressions.
 
+## Rating filters (v1.14)
+
+Repository now lets users filter their saved links by the existing optional **importance score (1–10)** without adding clutter to each card. A compact **Rating** dropdown sits beside the saved-date filter. Choices are **Any rating** (default, includes unrated), **High 8–10**, **Medium 5–7**, **Low 1–4**, **Rated only**, **Unrated only**, **Specific rating (1–10)** and **Custom range (inclusive minimum and maximum)**. A separate **Clear rating** action resets only the rating filter; the selected date and search terms remain unchanged. Reversed custom ranges show a visible warning and match no links.
+
+The rating filter combines with existing text search and saved-date filtering **across the full collection**, **within an individual category**, and **inside a Project**, using an intersection of the selected conditions. Filtering does not change a link's rating, category, project membership, storage format or cloud backup. Newly saved and legacy unrated links remain visible under **Any rating**, and can be located explicitly using **Unrated only**. Filters are session-only, like the existing date filter.
+
+No new server routes, APIs, permissions or credentials are needed. The PWA shell cache bumps to v1.14; no reinstall is required. Regression tests cover all ten exact scores, inclusive custom ranges, preset bands, missing/invalid ratings and combined date/category/project results.
+
 ## Current scope
 
 - Android installed PWA appears in Share menu. Share URLs, optionally edit title, description, category or note, and return with Android Back.
