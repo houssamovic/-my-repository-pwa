@@ -131,11 +131,12 @@
       </section>
       <section id="project-tools" class="project-tools" hidden aria-label="Project actions">
         <div class="project-toolbar">
-          <button id="project-generate" type="button" class="button primary">Prepare with AI</button>
+          <button id="project-generate" aria-describedby="project-source-privacy" type="button" class="button primary">Prepare with AI</button>
           <button id="project-add-links" type="button" class="button">Add saved links</button>
           <button id="project-calendar" type="button" class="button">Calendar reminder</button>
           <button id="project-edit" type="button" class="text-action">Edit project</button>
         </div>
+        <p id="project-source-privacy" class="project-privacy-note">Prepare with AI checks up to 12 selected project links through Cloudflare. Source sites receive public page or video requests. Workers AI receives your project details and available source text. Personal link notes stay on this device for brief generation. Video evidence is limited to metadata.</p>
         <p id="project-status" role="status" class="subtitle" aria-live="polite" hidden></p>
         <div id="project-brief" class="project-brief" hidden></div>
       </section>
@@ -148,7 +149,7 @@
       </section>
     </main>
     <footer class="footer">
-      <span>Prototype v1.14 · Saved locally on this device</span>
+      <span>Prototype v1.15 · Saved locally on this device</span>
       <div class="footer-actions"><button type="button" id="show-share-diagnostics">Share diagnostics</button><button type="button" id="cloud-backup-button">Cloud backup</button><button type="button" id="export-button">Export backup</button><label for="import-input" class="import-label">Import backup</label><input type="file" id="import-input" accept="application/json,.json" hidden></div>
     </footer>
   </div>
@@ -190,7 +191,7 @@
       <textarea id="project-purpose" rows="3" maxlength="600" placeholder="Context, preferences, constraints, questions…"></textarea>
       <label for="project-date">Target date (optional)</label>
       <input id="project-date" type="date">
-      <p class="project-privacy-note">AI preparation is optional. When requested, the project goal, saved link titles, descriptions, and any notes you added are sent to Cloudflare Workers AI. Video footage is not analyzed.</p>
+      <p class="project-privacy-note">AI project features are optional. Why relevant? sends the project details and the selected link’s saved title, description and note to Cloudflare Workers AI.</p>
       <div class="dialog-actions"><button id="project-delete" type="button" class="danger-link" hidden>Delete project</button><button class="button primary" type="submit">Save project</button></div>
     </form>
   </dialog>

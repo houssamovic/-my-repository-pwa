@@ -17,7 +17,7 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
   },
 });
 
-function validateUrl(raw) {
+export function validateUrl(raw) {
   if (!raw || typeof raw !== 'string' || raw.length > 2500) throw new Error('Invalid URL');
   const url = new URL(raw);
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Unsupported URL');
@@ -40,7 +40,7 @@ function decodeEntities(value = '') {
     return names[code.toLowerCase()] ?? m;
   });
 }
-function cleanText(value = '') {
+export function cleanText(value = '') {
   return decodeEntities(String(value).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()).replace(/\s+/g,' ').trim();
 }
 function parseAttributes(markup) {
@@ -112,7 +112,7 @@ export function youtubeVideoUrl(raw) {
     return /^[A-Za-z0-9_-]{11}$/.test(id) ? 'https://www.youtube.com/watch?v=' + id : '';
   } catch {return '';}
 }
-async function youtubeTitle(raw, signal) {
+export async function youtubeTitle(raw, signal) {
   const watch=youtubeVideoUrl(raw);
   if(!watch) return '';
   const api=new URL('https://www.youtube.com/oembed');
@@ -211,16 +211,17 @@ export async function youtubeSnippet(raw, env, signal, diagnostics) {
   return fields;
 }
 
-async function readPage(start, signal) {
+export async function readPage(start, signal, checkAccess) {
   let current = start;
   for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
     const target = validateUrl(current);
+    if (checkAccess) await checkAccess(target);
     const response = await fetch(target.href, {
       redirect: 'manual',
       signal,
       headers: {
         'Accept': 'text/html,application/xhtml+xml;q=0.9',
-        'User-Agent': 'Mozilla/5.0 (compatible; RepositoryLinkPreview/1.0)',
+        'User-Agent': checkAccess ? 'RepositoryLinkPreview/1.0' : 'Mozilla/5.0 (compatible; RepositoryLinkPreview/1.0)',
       },
     });
     if ([301,302,303,307,308].includes(response.status)) {
@@ -231,6 +232,10 @@ async function readPage(start, signal) {
       continue;
     }
     if (!response.ok) throw new Error(`Source HTTP ${response.status}`);
+    if (checkAccess && /noai|noindex|nosnippet|noarchive|none|max-snippet/i.test(response.headers.get('x-robots-tag') || '')) {
+      await response.body?.cancel();
+      throw new Error('Extraction restricted');
+    }
     const type = response.headers.get('content-type') || '';
     if (!/text\/html|application\/xhtml\+xml/i.test(type)) throw new Error('Not HTML');
     const announced = Number(response.headers.get('content-length') || 0);

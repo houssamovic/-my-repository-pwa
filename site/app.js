@@ -246,16 +246,40 @@
     headline.append(tag('strong',{},'Preparation brief'),
       tag('span',{className:'project-brief-meta'},info));
     ui.projectBrief.append(headline,tag('p',{className:'project-brief-summary'},brief.summary));
-    for(const [name,label] of [['tools','Tools & materials to verify'],['steps','Suggested approach'],['questions','Open questions'],['limitations','Source limitations']]){
+    const linkedSources=new Map((brief.sources||[]).map(source=>[source.source,
+      project.linkIds.includes(source.itemId)?items.find(item=>item.id===source.itemId):null]));
+    function sourceReference(number, label) {
+      const item=linkedSources.get(number);
+      return item?tag('a',{href:item.url,target:'_blank',rel:'noopener noreferrer'},label):tag('span',{},label);
+    }
+    for(const [name,label] of [['findings','Source findings'],['tools','Tools & materials to verify'],
+      ['steps','Suggested approach'],['questions','Open questions'],['research','Open questions & suggested research'],
+      ['limitations','Source limitations'],['sources','Sources & evidence']]){
       if(!brief[name]?.length)continue;
       const section=tag('section',{className:'project-brief-section'});
       section.append(tag('h3',{},label));
       const list=tag('ul');
-      for(const line of brief[name])list.append(tag('li',{},line));
+      for(const line of brief[name]){
+        const row=tag('li');
+        if(typeof line==='string')row.textContent=line;
+        else if(name==='sources'){
+          const item=linkedSources.get(line.source);
+          row.append(sourceReference(line.source,'['+line.source+'] '+(item?.title||'Saved link')),
+            ' · '+projectModel.EVIDENCE_LABELS[line.kind]);
+        }else if(name==='research'){
+          row.append(tag('strong',{},line.question),tag('div',{},line.research));
+        }else{
+          row.append(line.text+' ',sourceReference(line.source,'[Source '+line.source+']'),
+            tag('div',{className:'project-brief-meta'},'“'+line.quote+'”'));
+        }
+        list.append(row);
+      }
       section.append(list);ui.projectBrief.append(section);
     }
     ui.projectBrief.append(tag('p',{className:'project-brief-disclaimer'},
-      'Generated from available link titles, descriptions and your notes, not from watching or reading inaccessible content. Verify details using the original sources.'));
+      brief.sources
+        ? 'AI matched citations to available excerpts. Check the original context and verify applicability before following any suggestion. Video evidence is limited to metadata.'
+        : 'This earlier brief used saved details. Prepare again to see source references and evidence quality.'));
   }
   function navigateProject(id){
     if(!projects.some(p=>p.id===id))return;
@@ -805,11 +829,38 @@
       description:placeholder.test(description)?'':description.slice(0,420),
       note:String(item.note||'').slice(0,100),rating:projectModel.importance(item.rating)};
   }
-  function projectAiBody(project,mode,item=null) {
-    const sources=(item?[item]:project.linkIds.map(id=>items.find(x=>x.id===id)).filter(Boolean))
+  function projectAiItems(project,item=null) {
+    return (item?[item]:project.linkIds.map(id=>items.find(x=>x.id===id)).filter(Boolean))
       .sort((a,b)=>(projectModel.importance(b.rating)||0)-(projectModel.importance(a.rating)||0))
-      .slice(0,12).map(aiSource);
-    return {mode,title:project.title,purpose:project.purpose,date:project.date,links:sources};
+      .slice(0,12);
+  }
+  function projectAiBody(project,mode,item=null) {
+    return {mode,title:project.title,purpose:project.purpose,date:project.date,links:projectAiItems(project,item).map(aiSource)};
+  }
+  async function analyzeProjectSource(item,signal) {
+    const saved=aiSource(item);
+    const url=projectModel.sourceAnalysisUrl(item.url);
+    let evidence;
+    if(url){
+      try{
+        const response=await fetch('/api/source-analysis',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({url}),cache:'no-store',signal
+        });
+        if(response.ok)evidence=await response.json();
+      }catch(error){
+        if(signal.aborted)throw error;
+      }
+    }
+    const text=(value,max)=>typeof value==='string'
+      ?value.replace(/\bhttps?:\/\/[^\s<>"']+/gi,'[link]').slice(0,max):'';
+    return {
+      title:text(evidence?.title||saved.title,170),
+      description:text(evidence?.description||saved.description,420),
+      excerpt:text(evidence?.excerpt,1600),
+      kind:projectModel.evidenceKind(evidence?.kind),
+      rating:saved.rating
+    };
   }
   async function requestProjectAi(payload,signal){
     const response=await fetch(PROJECT_AI_ENDPOINT,{
@@ -829,16 +880,27 @@
     if(!p.linkIds.length){showToast('Add saved links to the project first.');return;}
     ui.projectGenerate.disabled=true;
     ui.projectStatus.hidden=false;
-    ui.projectStatus.textContent='Preparing a brief from available source details…';
+    ui.projectStatus.textContent='Checking selected sources for readable evidence…';
     const before=JSON.stringify({title:p.title,purpose:p.purpose,date:p.date,linkIds:p.linkIds,links:p.linkIds.map(id=>items.find(x=>x.id===id))});
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),42000);
     try{
-      const data=await requestProjectAi(projectAiBody(p,'brief'),controller.signal);
+      const selected=projectAiItems(p);
+      const redact=value=>value.replace(/\bhttps?:\/\/[^\s<>"']+/gi,'[link]');
+      const payload={mode:'source-brief',title:redact(p.title),purpose:redact(p.purpose),date:p.date,links:[]};
+      for(let index=0;index<selected.length;index+=4){
+        payload.links.push(...await Promise.all(selected.slice(index,index+4)
+          .map(item=>analyzeProjectSource(item,controller.signal))));
+      }
+      ui.projectStatus.textContent='Preparing a brief with source references…';
+      const data=await requestProjectAi(payload,controller.signal);
+      if(!Array.isArray(data.sources))throw Error('Source analysis is unavailable on this deployment.');
       if(!projects.includes(p))return;
       const after=JSON.stringify({title:p.title,purpose:p.purpose,date:p.date,linkIds:p.linkIds,links:p.linkIds.map(id=>items.find(x=>x.id===id))});
       if(before!==after){ui.projectStatus.textContent='Project changed while preparing. Run Prepare with AI again.';return;}
-      p.brief=projectModel.safeBrief({...data,generated:new Date().toISOString()});
-      if(!p.brief)throw Error('The AI response was incomplete. Try again.');
+      const brief=projectModel.safeBrief({...data,generated:new Date().toISOString(),
+        sources:data.sources.map(source=>({...source,itemId:selected[source.source-1]?.id}))});
+      if(!brief)throw Error('The AI response was incomplete. Try again.');
+      p.brief=brief;
       if(saveData()){
         render();
         ui.projectStatus.hidden=false;
