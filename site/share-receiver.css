@@ -47,3 +47,9 @@
   .capture-main{overflow-y:auto;overscroll-behavior:contain}
   .capture-content{flex:none;justify-content:flex-start;gap:7px}
 }
+
+/* Extra optional project/importance fields must scroll on small Android screens. */
+.capture-main{overflow-y:auto;overscroll-behavior:contain}
+.capture-content{flex:0 0 auto;justify-content:flex-start;gap:9px;padding-bottom:8px}
+.capture-field textarea{height:59px}
+@media(max-height:740px){.capture-content{gap:7px}.capture-field textarea{height:48px}}

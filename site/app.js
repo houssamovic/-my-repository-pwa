@@ -3,6 +3,9 @@
 
   const ITEMS_KEY = 'repository-v1-items';
   const CATEGORIES_KEY = 'repository-v1-categories';
+  const PROJECTS_KEY = 'repository-v1-projects';
+  const PROJECT_AI_ENDPOINT = '/api/project-brief';
+  const projectModel = globalThis.RepositoryProjects;
   const SHARE_LOG_KEY = 'repository-v12-share-log';
   const CLOUD_DIRTY = 'repository-cloud-dirty-v1';
   let cloudTimer;
@@ -32,6 +35,16 @@
     toast: $('toast'), entryDialog: $('entry-dialog'), entryForm: $('entry-form'),
     dialogHeading: $('dialog-heading'), entryUrl: $('entry-url'), entryTitle: $('entry-title'),
     entryDescription: $('entry-description'), entryNote: $('entry-note'), entryCategory: $('entry-category'),
+    entryProject: $('entry-project'), entryRating: $('entry-rating'),
+    projectsSection: $('projects-section'), projectGrid: $('project-grid'), projectEmpty: $('project-empty'),
+    projectTools: $('project-tools'), projectBrief: $('project-brief'), projectStatus: $('project-status'),
+    projectGenerate: $('project-generate'), projectAddLinks: $('project-add-links'),
+    projectCalendar: $('project-calendar'), projectEdit: $('project-edit'),
+    projectDialog: $('project-dialog'), projectDialogTitle: $('project-dialog-title'),
+    projectForm: $('project-form'), projectName: $('project-name'),
+    projectPurpose: $('project-purpose'), projectDate: $('project-date'),
+    projectDelete: $('project-delete'), projectPicker: $('project-picker-dialog'),
+    projectPickerSearch: $('project-picker-search'), projectPickerList: $('project-picker-list'),
     deleteEntry: $('delete-entry'), retryDetails: $('retry-details'), categoryDialog: $('category-dialog'),
     shareDiagnosticsDialog: $('share-diagnostics-dialog'), shareDiagnosticsList: $('share-diagnostics-list'),
     categoryName: $('category-name'), categoryForm: $('category-form')
@@ -47,6 +60,8 @@
   if (!Array.isArray(items)) items = [];
   categories = [...new Set([...DEFAULT_CATEGORIES.filter(c => c !== 'Unsorted'), ...categories.filter(c => typeof c === 'string' && c !== 'Unsorted' && c.trim().length && c.length <= 45), 'Unsorted'])];
   items = items.filter(e => e && typeof e === 'object' && typeof e.url === 'string' && typeof e.title === 'string' && typeof e.category === 'string');
+  for(const item of items)item.rating=projectModel.importance(item.rating);
+  let projects=projectModel.sanitize(readJSON(PROJECTS_KEY,[]),items);
   // Non-destructive migration: retry metadata for old placeholder entries.
   for (const e of items) {
     if (!e.metaStatus && /shared link \(content not analyzed\)|saved link \(content not analyzed\)/i.test(e.description || '')) {
@@ -61,6 +76,9 @@
     }
   }
   let currentCategory = null;
+  let currentProjectId = null;
+  let editingProjectId = null;
+  let projectSelectedByUser = false;
   let savedDateFilter = {mode:'all',day:'',start:'',end:''};
   let editedId = null;
   let categorySelectedByUser = false;
@@ -70,6 +88,7 @@
     try {
       localStorage.setItem(ITEMS_KEY, JSON.stringify(items));
       localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+      localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
       if (globalThis.RepositoryVault?.recovery()) { localStorage.setItem(CLOUD_DIRTY,crypto.randomUUID()); scheduleCloudBackup(); }
       return true;
     } catch {
@@ -83,7 +102,7 @@
       if(!navigator.onLine || !globalThis.RepositoryVault?.recovery())return;
       try {
         const token=localStorage.getItem(CLOUD_DIRTY);
-        await globalThis.RepositoryVault.backUp({version:1,exported:new Date().toISOString(),categories,items});
+        await globalThis.RepositoryVault.backUp({version:1,exported:new Date().toISOString(),categories,items,projects});
         if (localStorage.getItem(CLOUD_DIRTY)===token) localStorage.removeItem(CLOUD_DIRTY);
         else scheduleCloudBackup();
       } catch { /* The local copy is safe; retry on next online launch. */ }
@@ -176,7 +195,7 @@
     const title = String(data.title || defaultTitle(url)).trim().slice(0,250) || defaultTitle(url);
     const description = String(data.description || `${sourceKind(url)} · Shared link (content not analyzed)`).trim().slice(0,1200);
     const category = forcedCategory !== 'Auto' && categories.includes(forcedCategory) ? forcedCategory : inferCategory(title, description, url);
-    const entry = {id: (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random()}`), url, title, description, category, created: new Date().toISOString(),
+    const entry = {id: (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random()}`), url, title, description, category, rating:null, created: new Date().toISOString(),
       metaStatus: data.autoMetadata ? 'pending' : 'manual', metaAttempts: 0, manual: false,
       manualCategory: forcedCategory !== 'Auto' && categories.includes(forcedCategory)};
     items.unshift(entry);
@@ -190,6 +209,56 @@
     return el;
   }
   function categoryCount(c) { return items.filter(e=>e.category === c).length; }
+  function activeProject(){return projects.find(p=>p.id===currentProjectId)||null;}
+  function projectDateLabel(date){
+    if(!projectModel.validDate(date))return 'No target date';
+    return 'Target '+new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',year:'numeric'}).format(new Date(date+'T12:00:00'));
+  }
+  function renderProjects(){
+    ui.projectGrid.replaceChildren();
+    ui.projectEmpty.hidden=projects.length>0;
+    for(const project of projects){
+      const card=tag('button',{type:'button',className:'project-tile'});
+      card.append(tag('span',{className:'project-tile-name'},project.title));
+      const details=tag('span',{className:'project-tile-meta'},
+        project.linkIds.length+' saved '+(project.linkIds.length===1?'link':'links')+
+        ' · '+projectDateLabel(project.date));
+      card.append(details);
+      if(project.brief)card.append(tag('span',{className:'project-ready'},'Preparation saved'));
+      card.addEventListener('click',()=>navigateProject(project.id));
+      ui.projectGrid.append(card);
+    }
+  }
+  function renderBrief(){
+    const project=activeProject();
+    ui.projectBrief.replaceChildren();
+    ui.projectBrief.hidden=!project?.brief;
+    if(!project?.brief)return;
+    const brief=project.brief;
+    const headline=tag('div',{className:'project-brief-heading'});
+    const info=(brief.sourceCount||0)+' sources · Generated '+
+      (brief.generated?dates.label(brief.generated).replace(/^Saved /,''):'previously');
+    headline.append(tag('strong',{},'Preparation brief'),
+      tag('span',{className:'project-brief-meta'},info));
+    ui.projectBrief.append(headline,tag('p',{className:'project-brief-summary'},brief.summary));
+    for(const [name,label] of [['tools','Tools & materials to verify'],['steps','Suggested approach'],['questions','Open questions'],['limitations','Source limitations']]){
+      if(!brief[name]?.length)continue;
+      const section=tag('section',{className:'project-brief-section'});
+      section.append(tag('h3',{},label));
+      const list=tag('ul');
+      for(const line of brief[name])list.append(tag('li',{},line));
+      section.append(list);ui.projectBrief.append(section);
+    }
+    ui.projectBrief.append(tag('p',{className:'project-brief-disclaimer'},
+      'Generated from available link titles, descriptions and your notes, not from watching or reading inaccessible content. Verify details using the original sources.'));
+  }
+  function navigateProject(id){
+    if(!projects.some(p=>p.id===id))return;
+    currentCategory=null;currentProjectId=id;ui.search.value='';
+    ui.refreshDescriptionsStatus.hidden=true;
+    ui.projectStatus.hidden=true;
+    render();window.scrollTo({top:0,behavior:'instant'});
+  }
   function renderCategories() {
     ui.grid.replaceChildren();
     categories.forEach(category => {
@@ -205,6 +274,8 @@
     // The title is a real link, not an edit button. Keep the PWA in place by opening externally.
     const title=tag('a',{className:'entry-title',href:item.url,target:'_blank',rel:'noopener noreferrer',title:'Open original source'},item.title);
     titleCell.append(title,tag('div',{className:'entry-saved-date'},dates.label(item.created)));
+    if(projectModel.importance(item.rating)!==null)
+      titleCell.append(tag('div',{className:'entry-importance'},'Importance '+item.rating+'/10'));
     const descCell=tag('div',{className:'entry-cell entry-description'});
     descCell.append(tag('span',{className:'entry-kind'},sourceKind(item.url)),document.createTextNode(item.description));
     if (item.note) descCell.append(tag('div',{className:'entry-personal-note'},`Note: ${item.note}`));
@@ -214,6 +285,13 @@
     const edit=tag('button',{className:'entry-edit',type:'button',title:'Edit title, description, category, or note'},'Edit details');
     edit.addEventListener('click',()=>openEntryDialog(item));
     actions.append(link,edit);
+    const project=projects.find(p=>p.id===currentProjectId);
+    if(project && project.linkIds.includes(item.id)) {
+      const relevance=tag('button',{type:'button',className:'text-action project-why'},'Why relevant?');
+      relevance.addEventListener('click',()=>{void explainProjectLink(project.id,item.id,relevance);});
+      actions.append(relevance);
+      if(project.insights?.[item.id])linkCell.append(tag('div',{className:'project-link-insight'},project.insights[item.id]));
+    }
     linkCell.append(actions);
     row.append(titleCell,descCell,linkCell);
     return row;
@@ -224,9 +302,11 @@
     if (!results.length) {
       ui.list.hidden=true;
       ui.empty.hidden=false;
-      ui.empty.textContent = savedDateFilter.mode==='range' && !savedDateFilter.start && !savedDateFilter.end
+      ui.empty.textContent = !items.length?'No links yet. Save a link to get started.' :
+        savedDateFilter.mode==='range' && !savedDateFilter.start && !savedDateFilter.end
         ? 'Choose a start or end date to filter your saved links.'
         : savedDateFilter.mode!=='all' ? 'No links saved in this date period match your search and category.'
+        : activeProject() ? 'No links in this project yet. Add existing links or save a new one.'
         : currentCategory ? 'Nothing here yet. Share a link or use “Save link” to add the first item.' : 'No saved links match your search.';
       return;
     }
@@ -258,15 +338,27 @@
     const query=ui.search.value.trim().toLowerCase();
     const dateActive=savedDateFilter.mode!=='all';
     const selectedItems=items.filter(e=>matches(e,query)&&dates.matches(e,savedDateFilter));
-    ui.organizeButton.hidden=currentCategory!=='Unsorted';
-    ui.organizeStatus.hidden=currentCategory!=='Unsorted';
-    ui.refreshDescriptionsButton.hidden=!currentCategory||pendingYouTubeDescriptions(currentCategory).length===0;
+    const project=activeProject();
+    ui.projectTools.hidden=!project;
+    ui.organizeButton.hidden=currentCategory!=='Unsorted'||!!project;
+    ui.organizeStatus.hidden=currentCategory!=='Unsorted'||!!project;
+    ui.refreshDescriptionsButton.hidden=!!project||!currentCategory||pendingYouTubeDescriptions(currentCategory).length===0;
     if(!currentCategory)ui.refreshDescriptionsStatus.hidden=true;
-    if (currentCategory) {
+    ui.projectsSection.hidden=!!project||!!currentCategory||!!query||dateActive;
+    if(project){
+      ui.eyebrow.textContent='PROJECT';ui.title.textContent=project.title;
+      ui.subtitle.textContent=[project.purpose,projectDateLabel(project.date)].filter(Boolean).join(' · ');
+      ui.search.placeholder='Search links in this project...';
+      ui.back.hidden=false;ui.back.textContent='← All projects';ui.categories.hidden=true;ui.entries.hidden=false;
+      ui.listHeading.textContent='Project links';
+      ui.projectCalendar.disabled=!project.date;
+      renderBrief();
+      renderEntries(selectedItems.filter(e=>project.linkIds.includes(e.id)));
+    } else if (currentCategory) {
       ui.eyebrow.textContent='CATEGORY'; ui.title.textContent=currentCategory;
       ui.subtitle.textContent='Your saved material, without the clutter.';
       ui.search.placeholder=`Search within ${currentCategory}...`;
-      ui.back.hidden=false; ui.categories.hidden=true; ui.entries.hidden=false;
+      ui.back.hidden=false; ui.back.textContent='← All categories';ui.categories.hidden=true; ui.entries.hidden=false;
       ui.listHeading.textContent='All saved links';
       renderEntries(selectedItems.filter(e=>e.category===currentCategory));
     } else if (query || dateActive) {
@@ -281,7 +373,7 @@
       ui.subtitle.textContent='A quiet home for everything worth keeping.';
       ui.search.placeholder="Find something you've saved...";
       ui.back.hidden=true; ui.categories.hidden=false; ui.entries.hidden=true;
-      renderCategories();
+      renderProjects();renderCategories();
     }
   }
   function updateDateFields() {
@@ -313,12 +405,33 @@
   });
   updateDateFields();
   function matches(e,q) { return !q || [e.title,e.description,e.url,e.category,e.note||''].join(' ').toLowerCase().includes(q); }
-  function navigate(category=null) { currentCategory=category;ui.search.value='';ui.refreshDescriptionsStatus.hidden=true;ui.refreshDescriptionsStatus.textContent='';render();window.scrollTo({top:0,behavior:'instant'}); }
+  function navigate(category=null) { currentCategory=category;currentProjectId=null;ui.search.value='';ui.refreshDescriptionsStatus.hidden=true;ui.refreshDescriptionsStatus.textContent='';render();window.scrollTo({top:0,behavior:'instant'}); }
   function populateCategorySelect(selected='Auto') {
     ui.entryCategory.replaceChildren();
     ui.entryCategory.append(tag('option',{value:'Auto'},'Automatic (basic rules)'));
     categories.forEach(c=>ui.entryCategory.append(tag('option',{value:c},c)));
     ui.entryCategory.value=selected;
+  }
+  function populateProjectSelect(){
+    ui.entryProject.replaceChildren();
+    ui.entryProject.append(tag('option',{value:''},'No project change'));
+    for(const project of projects)ui.entryProject.append(tag('option',{value:project.id},project.title));
+    ui.entryProject.value=currentProjectId||'';
+    projectSelectedByUser=false;
+  }
+  function attachToProject(itemId,projectId){
+    const project=projects.find(p=>p.id===projectId);
+    if(!project||project.linkIds.includes(itemId))return false;
+    if(project.linkIds.length>=250){showToast('Project already contains 250 links.');return false;}
+    project.linkIds.push(itemId);
+    project.brief=null;
+    return true;
+  }
+  function invalidateProjectBriefForItem(itemId){
+    for(const p of projects)if(p.linkIds.includes(itemId)){
+      p.brief=null;
+      if(p.insights)delete p.insights[itemId];
+    }
   }
   function openEntryDialog(entry=null) {
     editedId=entry?.id || null;
@@ -329,6 +442,8 @@
     ui.entryDescription.value=entry?.description || '';
     ui.entryNote.value=entry?.note || '';
     populateCategorySelect(entry?.category || (currentCategory || 'Auto'));
+    populateProjectSelect();
+    ui.entryRating.value=projectModel.importance(entry?.rating)===null?'':String(entry.rating);
     categorySelectedByUser=false;
     ui.deleteEntry.hidden=!entry;
     ui.retryDetails.hidden=!entry;
@@ -359,7 +474,7 @@
         const previousTitle=found.title,previousDescription=found.description;
         if (realTitle && !/^instagram (post|reel)$|^x post$|^youtube (short|video)$/i.test(realTitle)) found.title = realTitle;
         if (realDesc) found.description = realDesc;
-        if(found.title!==previousTitle||found.description!==previousDescription){found.aiChecked=false;aiAttemptedInSession.delete(found.id);}
+        if(found.title!==previousTitle||found.description!==previousDescription){found.aiChecked=false;aiAttemptedInSession.delete(found.id);invalidateProjectBriefForItem(found.id);}
         else if (/content not analyzed|shared link/i.test(found.description)) found.description = 'Description not provided by source';
         if (!found.manualCategory) found.category = inferCategory(found.title, found.description, found.url);
         found.metaStatus = 'done';
@@ -563,6 +678,158 @@
       ui.organizeButton.disabled=false;
     }
   });
+  function openProjectEditor(project=null){
+    editingProjectId=project?.id||null;
+    ui.projectForm.reset();
+    ui.projectDialogTitle.textContent=project?'Edit project':'New project';
+    ui.projectName.value=project?.title||'';
+    ui.projectPurpose.value=project?.purpose||'';
+    ui.projectDate.value=project?.date||'';
+    ui.projectDelete.hidden=!project;
+    ui.projectDialog.showModal();
+    ui.projectName.focus();
+  }
+  $('new-project-button').addEventListener('click',()=>openProjectEditor());
+  $('project-close').addEventListener('click',()=>ui.projectDialog.close());
+  ui.projectEdit.addEventListener('click',()=>{const p=activeProject();if(p)openProjectEditor(p);});
+  ui.projectForm.addEventListener('submit',event=>{
+    event.preventDefault();
+    const title=ui.projectName.value.trim().slice(0,projectModel.NAME_LIMIT);
+    if(!title){ui.projectName.reportValidity();return;}
+    const date=ui.projectDate.value;
+    if(date&&!projectModel.validDate(date)){showToast('Choose a valid target date');return;}
+    const purpose=ui.projectPurpose.value.trim().slice(0,projectModel.PURPOSE_LIMIT);
+    let project=editingProjectId?projects.find(p=>p.id===editingProjectId):null;
+    if(project){
+      if(project.title!==title||project.purpose!==purpose||project.date!==date)project.brief=null;
+      Object.assign(project,{title,purpose,date});
+    } else {
+      if(projects.length>=projectModel.MAX_PROJECTS){showToast('Maximum 80 projects. Delete an unused project first.');return;}
+      project={id:crypto.randomUUID?.()||'project-'+Date.now()+'-'+Math.random(),title,purpose,date,
+        created:new Date().toISOString(),linkIds:[],brief:null,insights:{}};
+      projects.unshift(project);
+    }
+    if(saveData()){ui.projectDialog.close();navigateProject(project.id);showToast('Project saved');}
+  });
+  ui.projectDelete.addEventListener('click',()=>{
+    const p=projects.find(p=>p.id===editingProjectId);
+    if(!p||!confirm('Delete project "'+p.title+'"? Saved links will remain in Repository.'))return;
+    projects=projects.filter(x=>x.id!==p.id);
+    if(saveData()){ui.projectDialog.close();navigate();showToast('Project deleted. Saved links kept.');}
+  });
+  let projectPickerSelection=new Set();
+  function renderProjectPicker(){
+    const q=ui.projectPickerSearch.value.toLowerCase().trim();
+    ui.projectPickerList.replaceChildren();
+    const matches=items.filter(x=>[x.title,x.category,x.description,x.note||''].join(' ').toLowerCase().includes(q));
+    if(!matches.length){ui.projectPickerList.append(tag('p',{className:'project-privacy-note'},'No links match your search.'));return;}
+    if(matches.length>100)ui.projectPickerList.append(tag('p',{className:'project-privacy-note'},'Showing the first 100 results. Search to find more links.'));
+    for(const item of matches.slice(0,100)){
+      const label=tag('label',{className:'project-picker-option'});
+      const check=tag('input',{type:'checkbox'});
+      check.checked=projectPickerSelection.has(item.id);
+      check.addEventListener('change',()=>{
+        if(check.checked)projectPickerSelection.add(item.id);
+        else projectPickerSelection.delete(item.id);
+      });
+      const text=tag('span');
+      text.append(tag('strong',{},item.title),tag('small',{},item.category));
+      label.append(check,text);ui.projectPickerList.append(label);
+    }
+  }
+  ui.projectAddLinks.addEventListener('click',()=>{
+    const p=activeProject();if(!p)return;
+    projectPickerSelection=new Set(p.linkIds);
+    ui.projectPickerSearch.value='';renderProjectPicker();ui.projectPicker.showModal();
+  });
+  $('project-picker-close').addEventListener('click',()=>ui.projectPicker.close());
+  ui.projectPickerSearch.addEventListener('input',renderProjectPicker);
+  $('project-picker-save').addEventListener('click',()=>{
+    const p=activeProject();if(!p){ui.projectPicker.close();return;}
+    if(projectPickerSelection.size>250){showToast('A project supports up to 250 links.');return;}
+    const before=p.linkIds.join('|');
+    p.linkIds=items.filter(e=>projectPickerSelection.has(e.id)).map(e=>e.id);
+    if(before!==p.linkIds.join('|')){
+      p.brief=null;
+      for(const id of Object.keys(p.insights))if(!projectPickerSelection.has(id))delete p.insights[id];
+    }
+    if(saveData()){ui.projectPicker.close();render();showToast('Project links updated');}
+  });
+  function aiSource(item){
+    // No URL is sent; placeholders cannot masquerade as actual source material.
+    const placeholder=/^(?:details unavailable from source|description not provided by source|(?:youtube|instagram|tiktok|facebook).*(?:content not analyzed))$/i;
+    const description=String(item.description||'').trim();
+    return {title:String(item.title||'').slice(0,170),
+      description:placeholder.test(description)?'':description.slice(0,420),
+      note:String(item.note||'').slice(0,100),rating:projectModel.importance(item.rating)};
+  }
+  function projectAiBody(project,mode,item=null) {
+    const sources=(item?[item]:project.linkIds.map(id=>items.find(x=>x.id===id)).filter(Boolean))
+      .sort((a,b)=>(projectModel.importance(b.rating)||0)-(projectModel.importance(a.rating)||0))
+      .slice(0,12).map(aiSource);
+    return {mode,title:project.title,purpose:project.purpose,date:project.date,links:sources};
+  }
+  async function requestProjectAi(payload,signal){
+    const response=await fetch(PROJECT_AI_ENDPOINT,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload),cache:'no-store',signal
+    });
+    const result=await response.json().catch(()=>({status:'invalid_ai_response'}));
+    if(!response.ok || result.status!=='ok'){
+      if(result.status==='not_configured')throw Error('Cloudflare AI is not connected to this deployment.');
+      if(result.status==='insufficient_information')throw Error('Add a link with some readable information before requesting a brief.');
+      throw Error('AI preparation is currently unavailable. Your saved links are unchanged.');
+    }
+    return result;
+  }
+  ui.projectGenerate.addEventListener('click',async()=>{
+    const p=activeProject();if(!p||ui.projectGenerate.disabled)return;
+    if(!p.linkIds.length){showToast('Add saved links to the project first.');return;}
+    ui.projectGenerate.disabled=true;
+    ui.projectStatus.hidden=false;
+    ui.projectStatus.textContent='Preparing a brief from available source details…';
+    const before=JSON.stringify({title:p.title,purpose:p.purpose,date:p.date,linkIds:p.linkIds,links:p.linkIds.map(id=>items.find(x=>x.id===id))});
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
+    try{
+      const data=await requestProjectAi(projectAiBody(p,'brief'),controller.signal);
+      if(!projects.includes(p))return;
+      const after=JSON.stringify({title:p.title,purpose:p.purpose,date:p.date,linkIds:p.linkIds,links:p.linkIds.map(id=>items.find(x=>x.id===id))});
+      if(before!==after){ui.projectStatus.textContent='Project changed while preparing. Run Prepare with AI again.';return;}
+      p.brief=projectModel.safeBrief({...data,generated:new Date().toISOString()});
+      if(!p.brief)throw Error('The AI response was incomplete. Try again.');
+      if(saveData()){
+        render();
+        ui.projectStatus.hidden=false;
+        ui.projectStatus.textContent='Preparation saved. Check the original sources before following any steps.';
+      }
+    }catch(error){ui.projectStatus.textContent=error?.name==='AbortError'?'AI preparation timed out. Try again.':error.message||'Preparation unavailable.';}
+    finally{clearTimeout(timer);ui.projectGenerate.disabled=false;}
+  });
+  async function explainProjectLink(projectId,itemId,button){
+    const p=projects.find(x=>x.id===projectId),item=items.find(x=>x.id===itemId);
+    if(!p||!item||!p.linkIds.includes(itemId)||button.disabled)return;
+    button.disabled=true;button.textContent='Checking…';
+    const original=JSON.stringify({purpose:p.purpose,title:p.title,url:item.url,description:item.description,note:item.note});
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),18000);
+    try{
+      const data=await requestProjectAi(projectAiBody(p,'relevance',item),controller.signal);
+      if(!projects.includes(p)||!p.linkIds.includes(itemId))return;
+      if(original!==JSON.stringify({purpose:p.purpose,title:p.title,url:item.url,description:item.description,note:item.note}))return;
+      p.insights[itemId]=String(data.relevance||'').slice(0,600);
+      if(saveData())render();
+    }catch(error){showToast(error?.name==='AbortError'?'AI request timed out.':error.message||'Could not assess this link.');}
+    finally{clearTimeout(timer);button.disabled=false;button.textContent='Why relevant?';}
+  }
+  ui.projectCalendar.addEventListener('click',()=>{
+    const p=activeProject();if(!p)return;
+    const data=projectModel.calendar(p);
+    if(!data){showToast('Set a target date in the project first.');return;}
+    const blob=new Blob([data],{type:'text/calendar;charset=utf-8'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='repository-'+p.date+'.ics';
+    document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2500);
+    showToast('Calendar event downloaded. Import it to activate a reminder.');
+  });
   function recordShare(params, status, detail) {
     // Store diagnostic metadata locally only. Do not persist shared text or full URLs.
     const data = {
@@ -634,6 +901,7 @@
   });
   $('close-entry-dialog').addEventListener('click',()=>ui.entryDialog.close());
   ui.entryCategory.addEventListener('change',()=>{categorySelectedByUser=true;});
+  ui.entryProject.addEventListener('change',()=>{projectSelectedByUser=true;});
   ui.entryForm.addEventListener('submit',(event)=>{
     event.preventDefault();
     const url=cleanUrl(ui.entryUrl.value);
@@ -648,13 +916,18 @@
       const dupe=items.some(e=>e.id!==editedId && canonicalUrl(e.url)===canonicalUrl(url));
       if (dupe){showToast('This URL is already in the repository.');return;}
       const detailsChanged=url!==found.url || title!==found.title || description!==found.description;
+      const noteChanged=ui.entryNote.value.trim().slice(0,1200)!==String(found.note||'');
+      const ratingChanged=projectModel.importance(ui.entryRating.value)!==projectModel.importance(found.rating);
       const manualCategory=categorySelectedByUser?selected!=='Auto':Boolean(found.manualCategory);
       const nextCategory=manualCategory ? (categorySelectedByUser?selected:found.category) :
         (detailsChanged||categorySelectedByUser?inferCategory(title,description,url):found.category);
       Object.assign(found,{url,title,description,category:nextCategory,
         note:ui.entryNote.value.trim().slice(0,1200),manual:detailsChanged?true:found.manual,
         manualCategory,metaStatus:detailsChanged?'manual':found.metaStatus,
-        aiChecked:detailsChanged||categorySelectedByUser?false:found.aiChecked});
+        aiChecked:detailsChanged||categorySelectedByUser?false:found.aiChecked,
+        rating:projectModel.importance(ui.entryRating.value)});
+      if(detailsChanged||noteChanged||ratingChanged||categorySelectedByUser)invalidateProjectBriefForItem(found.id);
+      if(projectSelectedByUser&&ui.entryProject.value)attachToProject(found.id,ui.entryProject.value);
       if(detailsChanged||categorySelectedByUser)aiAttemptedInSession.delete(found.id);
       if (saveData()) {
         ui.entryDialog.close();render();showToast('Saved changes');
@@ -665,8 +938,12 @@
       if (result.error){showToast(result.error);return;}
       ui.entryDialog.close();
       if (result.item) {
-        if (ui.entryNote.value.trim()) {result.item.note=ui.entryNote.value.trim().slice(0,1200);saveData();}
-        navigate(result.item.category);showToast(result.duplicate?'Already saved':'Link saved');
+        if (ui.entryNote.value.trim())result.item.note=ui.entryNote.value.trim().slice(0,1200);
+        result.item.rating=projectModel.importance(ui.entryRating.value);
+        if(ui.entryProject.value)attachToProject(result.item.id,ui.entryProject.value);
+        saveData();
+        if(currentProjectId)navigateProject(currentProjectId);else navigate(result.item.category);
+        showToast(result.duplicate?'Already saved':'Link saved');
         if (result.item.metaStatus === 'pending') void enrichItem(result.item.id);
         else if(result.item.category==='Unsorted'&&!result.item.manualCategory)void classifyUnsorted(result.item.id); }
     }
@@ -683,6 +960,10 @@
     if (!editedId || !confirm('Delete this saved link?')) return;
     const old=items;
     items=items.filter(e=>e.id!==editedId);
+    for(const p of projects)if(p.linkIds.includes(editedId)){
+      p.linkIds=p.linkIds.filter(id=>id!==editedId);p.brief=null;
+      if(p.insights)delete p.insights[editedId];
+    }
     if (saveData()) {ui.entryDialog.close();render();showToast('Link removed');}
     else items=old;
   });
@@ -697,7 +978,7 @@
     if (saveData()) {ui.categoryDialog.close();render();showToast('Category created');}
   });
   $('export-button').addEventListener('click',()=>{
-    const blob=new Blob([JSON.stringify({version:1,exported:new Date().toISOString(),categories,items},null,2)],{type:'application/json'});
+    const blob=new Blob([JSON.stringify({version:1,exported:new Date().toISOString(),categories,items,projects},null,2)],{type:'application/json'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='repository-backup.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
   });
   $('import-input').addEventListener('change',async event=>{
@@ -709,11 +990,11 @@
       const data=JSON.parse(await file.text());
       if(data.version!==1 || !Array.isArray(data.items) || !Array.isArray(data.categories) || data.items.length>MAX_ITEMS) throw Error('Format');
       const safeCategories=[...new Set([...DEFAULT_CATEGORIES,...data.categories.filter(c=>typeof c==='string'&&c.length>0&&c.length<=45)])];
-      const safeItems=data.items.filter(e=>e && cleanUrl(e.url) && typeof e.title==='string' && typeof e.description==='string' && typeof e.category==='string').map(e=>({id:String(e.id||crypto.randomUUID()),url:cleanUrl(e.url),title:e.title.slice(0,250),description:e.description.slice(0,1200),note:String(e.note||'').slice(0,1200),category:safeCategories.includes(e.category)?e.category:'Unsorted',created:typeof e.created==='string' && Number.isFinite(Date.parse(e.created)) ? e.created : null}));
+      const safeItems=data.items.filter(e=>e && cleanUrl(e.url) && typeof e.title==='string' && typeof e.description==='string' && typeof e.category==='string').map(e=>({id:String(e.id||crypto.randomUUID()),url:cleanUrl(e.url),title:e.title.slice(0,250),description:e.description.slice(0,1200),note:String(e.note||'').slice(0,1200),category:safeCategories.includes(e.category)?e.category:'Unsorted',rating:projectModel.importance(e.rating),created:typeof e.created==='string' && Number.isFinite(Date.parse(e.created)) ? e.created : null}));
       if(!confirm(`Import ${safeItems.length} links? This replaces the current repository on this device.`)) return;
-      const oldItems=items,oldCategories=categories;
-      items=safeItems;categories=safeCategories;
-      if (!saveData()){items=oldItems;categories=oldCategories;return;}
+      const oldItems=items,oldCategories=categories,oldProjects=projects;
+      items=safeItems;categories=safeCategories;projects=projectModel.sanitize(data.projects,safeItems);
+      if (!saveData()){items=oldItems;categories=oldCategories;projects=oldProjects;return;}
       navigate();showToast('Backup imported');
     } catch {showToast('Invalid backup file');}
   });
@@ -730,7 +1011,7 @@
   const cloudCopy = $('cloud-copy');
   const cloudDisconnect = $('cloud-disconnect');
   const vault = globalThis.RepositoryVault;
-  const backupSnapshot = () => ({version:1,exported:new Date().toISOString(),categories,items});
+  const backupSnapshot = () => ({version:1,exported:new Date().toISOString(),categories,items,projects});
   const vaultMessage = (message) => {cloudStatus.textContent=message;};
   function setVaultButtons(enabled) {
     cloudCreate.disabled=!enabled;
@@ -777,9 +1058,10 @@
       const safeCategories=[...new Set([...DEFAULT_CATEGORIES,...data.categories.filter(c=>typeof c==='string'&&c.trim().length&&c.length<=45)])];
       const safeItems=data.items.filter(e=>e && cleanUrl(e.url)&&typeof e.title==='string'&&typeof e.description==='string'&&typeof e.category==='string').map(e=>({...e,id:String(e.id||crypto.randomUUID()),url:cleanUrl(e.url),title:e.title.slice(0,250),description:e.description.slice(0,1200),note:String(e.note||'').slice(0,1200),category:safeCategories.includes(e.category)?e.category:'Unsorted'}));
       if(!confirm(`Restore ${safeItems.length} links? This REPLACES your ${items.length} locally saved links on this device. Export a local backup first if you want to preserve them.`)) {vaultMessage('Restore cancelled.');return;}
-      const originalItems=items,originalCategories=categories;
-      items=safeItems;categories=safeCategories;
-      if(!saveData()){items=originalItems;categories=originalCategories;throw new Error('Not enough device storage');}
+      const originalItems=items,originalCategories=categories,originalProjects=projects;
+      items=safeItems.map(e=>({...e,rating:projectModel.importance(e.rating)}));
+      categories=safeCategories;projects=projectModel.sanitize(data.projects,items);
+      if(!saveData()){items=originalItems;categories=originalCategories;projects=originalProjects;throw new Error('Not enough device storage');}
       vault.remember(code,result.revision);
       localStorage.removeItem(CLOUD_DIRTY);
       recoveryInput.value='';

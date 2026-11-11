@@ -15,6 +15,7 @@
   <script defer src="/classifier.js"></script>
   <script defer src="/cloud-vault.js"></script>
   <script defer src="/date-filter.js"></script>
+  <script defer src="/projects.js"></script>
   <script defer src="/app.js"></script>
 </head>
 <body>
@@ -59,9 +60,24 @@
           <button id="saved-date-clear" type="button" class="text-action" hidden>Clear date</button>
         </div>
       </section>
+      <section id="projects-section" aria-label="Projects">
+        <div class="section-heading"><h2>Projects</h2><button id="new-project-button" class="text-action" type="button">+ New project</button></div>
+        <div id="project-grid" class="project-grid"></div>
+        <p id="project-empty" class="project-empty">Save links for something you're planning. Projects stay separate from categories.</p>
+      </section>
       <section id="categories-section" aria-label="Categories">
         <div class="section-heading"><h2>Categories</h2><button id="new-category-button" class="text-action" type="button">+ New category</button></div>
         <div id="category-grid" class="category-grid"></div>
+      </section>
+      <section id="project-tools" class="project-tools" hidden aria-label="Project actions">
+        <div class="project-toolbar">
+          <button id="project-generate" type="button" class="button primary">Prepare with AI</button>
+          <button id="project-add-links" type="button" class="button">Add saved links</button>
+          <button id="project-calendar" type="button" class="button">Calendar reminder</button>
+          <button id="project-edit" type="button" class="text-action">Edit project</button>
+        </div>
+        <p id="project-status" role="status" class="subtitle" aria-live="polite" hidden></p>
+        <div id="project-brief" class="project-brief" hidden></div>
       </section>
       <section id="entries-section" hidden aria-label="Saved links">
         <div class="section-heading"><h2 id="list-heading">Saved links</h2><div class="entry-heading-actions"><button id="organize-unsorted-button" type="button" class="text-action" hidden>Organize now</button> <button id="refresh-descriptions-button" type="button" class="text-action" hidden>Refresh descriptions</button> <span id="result-count" class="entry-count"></span></div></div>
@@ -72,7 +88,7 @@
       </section>
     </main>
     <footer class="footer">
-      <span>Prototype v1.12 · Saved locally on this device</span>
+      <span>Prototype v1.13 · Saved locally on this device</span>
       <div class="footer-actions"><button type="button" id="show-share-diagnostics">Share diagnostics</button><button type="button" id="cloud-backup-button">Cloud backup</button><button type="button" id="export-button">Export backup</button><label for="import-input" class="import-label">Import backup</label><input type="file" id="import-input" accept="application/json,.json" hidden></div>
     </footer>
   </div>
@@ -91,8 +107,40 @@
       <textarea id="entry-note" name="note" rows="2" maxlength="1200" placeholder="Anything you want to remember"></textarea>
       <label for="entry-category">Category</label>
       <select id="entry-category" name="category"></select>
+      <label for="entry-project">Project (optional)</label>
+      <select id="entry-project" name="project"></select>
+      <label for="entry-rating">Importance (optional)</label>
+      <select id="entry-rating" name="rating">
+        <option value="">Not rated</option>
+        <option value="1">1 / 10</option><option value="2">2 / 10</option>
+        <option value="3">3 / 10</option><option value="4">4 / 10</option>
+        <option value="5">5 / 10</option><option value="6">6 / 10</option>
+        <option value="7">7 / 10</option><option value="8">8 / 10</option>
+        <option value="9">9 / 10</option><option value="10">10 / 10</option>
+      </select>
       <div class="dialog-actions"><button type="button" id="delete-entry" class="danger-link" hidden>Delete</button><button type="button" id="retry-details" class="text-action" hidden>Refresh details</button><button class="button primary" type="submit" id="save-entry">Save link</button></div>
     </form>
+  </dialog>
+  <dialog id="project-dialog" class="editor-dialog">
+    <form id="project-form" method="dialog">
+      <div class="dialog-top"><h2 id="project-dialog-title">New project</h2><button id="project-close" class="close-button" type="button" aria-label="Close">×</button></div>
+      <label for="project-name">Project name <span class="required">*</span></label>
+      <input id="project-name" maxlength="90" required placeholder="e.g. Repair bedroom drywall">
+      <label for="project-purpose">What are you trying to accomplish? <small>(optional)</small></label>
+      <textarea id="project-purpose" rows="3" maxlength="600" placeholder="Context, preferences, constraints, questions…"></textarea>
+      <label for="project-date">Target date (optional)</label>
+      <input id="project-date" type="date">
+      <p class="project-privacy-note">AI preparation is optional. When requested, the project goal, saved link titles, descriptions, and any notes you added are sent to Cloudflare Workers AI. Video footage is not analyzed.</p>
+      <div class="dialog-actions"><button id="project-delete" type="button" class="danger-link" hidden>Delete project</button><button class="button primary" type="submit">Save project</button></div>
+    </form>
+  </dialog>
+  <dialog id="project-picker-dialog" class="editor-dialog">
+    <div class="dialog-top"><h2>Add existing links</h2><button id="project-picker-close" type="button" class="close-button" aria-label="Close">×</button></div>
+    <label for="project-picker-search">Find links</label>
+    <input id="project-picker-search" type="search" placeholder="Search titles, categories, notes…">
+    <p class="project-privacy-note">Links stay in their original categories. Check the links to include in this project.</p>
+    <div id="project-picker-list" class="project-picker-list"></div>
+    <div class="dialog-actions"><button type="button" id="project-picker-save" class="button primary">Save selection</button></div>
   </dialog>
   <dialog id="category-dialog" class="editor-dialog small-dialog">
     <form id="category-form" method="dialog">
