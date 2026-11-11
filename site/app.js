@@ -422,6 +422,7 @@
   function attachToProject(itemId,projectId){
     const project=projects.find(p=>p.id===projectId);
     if(!project||project.linkIds.includes(itemId))return false;
+    if(project.linkIds.length>=250){showToast('Project already contains 250 links.');return false;}
     project.linkIds.push(itemId);
     project.brief=null;
     return true;
@@ -473,7 +474,7 @@
         const previousTitle=found.title,previousDescription=found.description;
         if (realTitle && !/^instagram (post|reel)$|^x post$|^youtube (short|video)$/i.test(realTitle)) found.title = realTitle;
         if (realDesc) found.description = realDesc;
-        if(found.title!==previousTitle||found.description!==previousDescription){found.aiChecked=false;aiAttemptedInSession.delete(found.id);}
+        if(found.title!==previousTitle||found.description!==previousDescription){found.aiChecked=false;aiAttemptedInSession.delete(found.id);invalidateProjectBriefForItem(found.id);}
         else if (/content not analyzed|shared link/i.test(found.description)) found.description = 'Description not provided by source';
         if (!found.manualCategory) found.category = inferCategory(found.title, found.description, found.url);
         found.metaStatus = 'done';
@@ -915,6 +916,8 @@
       const dupe=items.some(e=>e.id!==editedId && canonicalUrl(e.url)===canonicalUrl(url));
       if (dupe){showToast('This URL is already in the repository.');return;}
       const detailsChanged=url!==found.url || title!==found.title || description!==found.description;
+      const noteChanged=ui.entryNote.value.trim().slice(0,1200)!==String(found.note||'');
+      const ratingChanged=projectModel.importance(ui.entryRating.value)!==projectModel.importance(found.rating);
       const manualCategory=categorySelectedByUser?selected!=='Auto':Boolean(found.manualCategory);
       const nextCategory=manualCategory ? (categorySelectedByUser?selected:found.category) :
         (detailsChanged||categorySelectedByUser?inferCategory(title,description,url):found.category);
@@ -923,7 +926,7 @@
         manualCategory,metaStatus:detailsChanged?'manual':found.metaStatus,
         aiChecked:detailsChanged||categorySelectedByUser?false:found.aiChecked,
         rating:projectModel.importance(ui.entryRating.value)});
-      if(detailsChanged||categorySelectedByUser)invalidateProjectBriefForItem(found.id);
+      if(detailsChanged||noteChanged||ratingChanged||categorySelectedByUser)invalidateProjectBriefForItem(found.id);
       if(projectSelectedByUser&&ui.entryProject.value)attachToProject(found.id,ui.entryProject.value);
       if(detailsChanged||categorySelectedByUser)aiAttemptedInSession.delete(found.id);
       if (saveData()) {
