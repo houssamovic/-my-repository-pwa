@@ -30,7 +30,14 @@ function choices(existing) {
   return categories.slice(0,45);
 }
 function parseLabel(response,categories) {
-  const value=typeof response==='string'?response:response?.response||response?.result?.response||'';
+  // Gemma 4 on Cloudflare returns OpenAI-style chat completions:
+  // {choices:[{message:{content:'Gaming'}}]}. Older model families
+  // sometimes return {response:'Gaming'}, so support both.
+  const chatContent=response?.choices?.[0]?.message?.content;
+  const value=typeof response==='string' ? response :
+    (typeof chatContent==='string' ? chatContent :
+      Array.isArray(chatContent) ? chatContent.filter(x=>x?.type==='text').map(x=>x.text||'').join(' ') :
+      response?.response||response?.result?.response||'');
   const raw=clean(value,250);
   if(!raw) return null;
   let candidate=raw;
@@ -71,12 +78,18 @@ export async function onRequestPost({request,env}) {
     const answer=await env.AI.run('@cf/google/gemma-4-26b-a4b-it',{
       messages:[{role:'system',content:'You are a strict topic classifier. Output exactly one allowed category label.'},
         {role:'user',content:prompt}],
-      max_tokens:75,temperature:0
+      max_completion_tokens:75,temperature:0,
+      chat_template_kwargs:{enable_thinking:false}
     });
     const category=parseLabel(answer,categories);
     if(!category) return json({status:'unavailable',category:'Unsorted'});
     return json({status:'ok',category});
   } catch {return json({status:'unavailable',category:'Unsorted'},503);}
+}
+// Debugging endpoint: confirms whether the production Pages deployment
+// has the Workers AI binding. Never exposes tokens or user information.
+export function onRequestGet({env}) {
+  return json({available:typeof env?.AI?.run==='function'});
 }
 export function onRequest(){return json({status:'method_not_allowed'},405);}
 export const __test={choices,parseLabel,useful};
