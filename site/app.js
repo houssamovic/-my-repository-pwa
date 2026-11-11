@@ -349,7 +349,7 @@
       ui.eyebrow.textContent='PROJECT';ui.title.textContent=project.title;
       ui.subtitle.textContent=[project.purpose,projectDateLabel(project.date)].filter(Boolean).join(' · ');
       ui.search.placeholder='Search links in this project...';
-      ui.back.hidden=false;ui.categories.hidden=true;ui.entries.hidden=false;
+      ui.back.hidden=false;ui.back.textContent='← All projects';ui.categories.hidden=true;ui.entries.hidden=false;
       ui.listHeading.textContent='Project links';
       ui.projectCalendar.disabled=!project.date;
       renderBrief();
@@ -358,7 +358,7 @@
       ui.eyebrow.textContent='CATEGORY'; ui.title.textContent=currentCategory;
       ui.subtitle.textContent='Your saved material, without the clutter.';
       ui.search.placeholder=`Search within ${currentCategory}...`;
-      ui.back.hidden=false; ui.categories.hidden=true; ui.entries.hidden=false;
+      ui.back.hidden=false; ui.back.textContent='← All categories';ui.categories.hidden=true; ui.entries.hidden=false;
       ui.listHeading.textContent='All saved links';
       renderEntries(selectedItems.filter(e=>e.category===currentCategory));
     } else if (query || dateActive) {
