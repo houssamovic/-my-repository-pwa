@@ -33,7 +33,8 @@
           <input id="capture-title" type="text" maxlength="250" autocomplete="off" aria-label="Saved link title">
         </label>
         <label class="capture-field" for="capture-description"><span>Description</span>
-          <textarea id="capture-description" rows="2" maxlength="1200" placeholder="Description not available. Add one if you like."></textarea>
+          <textarea id="capture-description" rows="2" maxlength="1200" placeholder="What is this about? A few words help categorization."></textarea>
+          <small id="capture-description-hint" class="capture-description-hint" hidden>No caption available? Describe what the video shows to help automatic sorting.</small>
         </label>
         <div class="capture-field"><span>Link</span>
           <div class="capture-link-row"><input id="capture-url" type="url" readonly aria-label="Original link"/><a id="capture-open-link" href="#" rel="noopener noreferrer" target="_blank" aria-label="Open original link">↗</a></div>
