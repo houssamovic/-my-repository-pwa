@@ -28,6 +28,10 @@
     dateMode: $('saved-date-mode'), dateExact: $('saved-date-exact'), dateOn: $('saved-date-on'),
     dateRange: $('saved-date-range'), dateFrom: $('saved-date-from'), dateTo: $('saved-date-to'),
     dateClear: $('saved-date-clear'),
+    ratingMode: $('saved-rating-mode'), ratingExactFields: $('saved-rating-exact-fields'),
+    ratingRangeFields: $('saved-rating-range-fields'), ratingExact: $('saved-rating-exact'),
+    ratingMin: $('saved-rating-min'), ratingMax: $('saved-rating-max'),
+    ratingClear: $('saved-rating-clear'), ratingError: $('saved-rating-error'),
     entries: $('entries-section'), list: $('entries-list'), listHeading: $('list-heading'),
     resultCount: $('result-count'), empty: $('empty-message'),
     organizeButton: $('organize-unsorted-button'), organizeStatus: $('organize-status'),
@@ -80,6 +84,7 @@
   let editingProjectId = null;
   let projectSelectedByUser = false;
   let savedDateFilter = {mode:'all',day:'',start:'',end:''};
+  let savedRatingFilter = {mode:'any',exact:'10',min:'1',max:'10'};
   let editedId = null;
   let categorySelectedByUser = false;
   let toastTimer = null;
@@ -305,7 +310,10 @@
       ui.empty.textContent = !items.length?'No links yet. Save a link to get started.' :
         savedDateFilter.mode==='range' && !savedDateFilter.start && !savedDateFilter.end
         ? 'Choose a start or end date to filter your saved links.'
-        : savedDateFilter.mode!=='all' ? 'No links saved in this date period match your search and category.'
+        : savedRatingFilter.mode==='range' && Number(savedRatingFilter.min)>Number(savedRatingFilter.max)
+        ? 'Choose a minimum rating that is not higher than the maximum.'
+        : savedDateFilter.mode!=='all' || savedRatingFilter.mode!=='any'
+        ? 'No links match the selected date, rating, and search filters.'
         : activeProject() ? 'No links in this project yet. Add existing links or save a new one.'
         : currentCategory ? 'Nothing here yet. Share a link or use “Save link” to add the first item.' : 'No saved links match your search.';
       return;
@@ -337,14 +345,15 @@
   function render() {
     const query=ui.search.value.trim().toLowerCase();
     const dateActive=savedDateFilter.mode!=='all';
-    const selectedItems=items.filter(e=>matches(e,query)&&dates.matches(e,savedDateFilter));
+    const ratingActive=savedRatingFilter.mode!=='any';
+    const selectedItems=items.filter(e=>matches(e,query)&&dates.matches(e,savedDateFilter)&&projectModel.ratingMatches(e.rating,savedRatingFilter));
     const project=activeProject();
     ui.projectTools.hidden=!project;
     ui.organizeButton.hidden=currentCategory!=='Unsorted'||!!project;
     ui.organizeStatus.hidden=currentCategory!=='Unsorted'||!!project;
     ui.refreshDescriptionsButton.hidden=!!project||!currentCategory||pendingYouTubeDescriptions(currentCategory).length===0;
     if(!currentCategory)ui.refreshDescriptionsStatus.hidden=true;
-    ui.projectsSection.hidden=!!project||!!currentCategory||!!query||dateActive;
+    ui.projectsSection.hidden=!!project||!!currentCategory||!!query||dateActive||ratingActive;
     if(project){
       ui.eyebrow.textContent='PROJECT';ui.title.textContent=project.title;
       ui.subtitle.textContent=[project.purpose,projectDateLabel(project.date)].filter(Boolean).join(' · ');
@@ -361,12 +370,12 @@
       ui.back.hidden=false; ui.back.textContent='← All categories';ui.categories.hidden=true; ui.entries.hidden=false;
       ui.listHeading.textContent='All saved links';
       renderEntries(selectedItems.filter(e=>e.category===currentCategory));
-    } else if (query || dateActive) {
+    } else if (query || dateActive || ratingActive) {
       ui.eyebrow.textContent='YOUR COLLECTION'; ui.title.textContent='Everything, in its place.';
       ui.subtitle.textContent='A quiet home for everything worth keeping.';
       ui.search.placeholder="Find something you've saved...";
       ui.back.hidden=true; ui.categories.hidden=true; ui.entries.hidden=false;
-      ui.listHeading.textContent=query?'Search results':'Saved links by date';
+      ui.listHeading.textContent=query?'Search results':dateActive&&ratingActive?'Filtered saved links':dateActive?'Saved links by date':'Saved links by rating';
       renderEntries(selectedItems);
     } else {
       ui.eyebrow.textContent='YOUR COLLECTION'; ui.title.textContent='Everything, in its place.';
@@ -404,6 +413,39 @@
     updateDateFields();render();
   });
   updateDateFields();
+  function updateRatingFields() {
+    const mode=savedRatingFilter.mode;
+    ui.ratingExactFields.hidden=mode!=='exact';
+    ui.ratingRangeFields.hidden=mode!=='range';
+    ui.ratingClear.hidden=mode==='any';
+    const invalid=mode==='range' && Number(savedRatingFilter.min)>Number(savedRatingFilter.max);
+    ui.ratingError.hidden=!invalid;
+    ui.ratingMin.setAttribute('aria-invalid',String(invalid));
+    ui.ratingMax.setAttribute('aria-invalid',String(invalid));
+  }
+  ui.ratingMode.addEventListener('change',()=>{
+    savedRatingFilter.mode=ui.ratingMode.value;
+    updateRatingFields();render();
+  });
+  ui.ratingExact.addEventListener('change',()=>{
+    savedRatingFilter.exact=ui.ratingExact.value;
+    render();
+  });
+  ui.ratingMin.addEventListener('change',()=>{
+    savedRatingFilter.min=ui.ratingMin.value;
+    updateRatingFields();render();
+  });
+  ui.ratingMax.addEventListener('change',()=>{
+    savedRatingFilter.max=ui.ratingMax.value;
+    updateRatingFields();render();
+  });
+  ui.ratingClear.addEventListener('click',()=>{
+    savedRatingFilter={mode:'any',exact:'10',min:'1',max:'10'};
+    ui.ratingMode.value='any';ui.ratingExact.value='10';
+    ui.ratingMin.value='1';ui.ratingMax.value='10';
+    updateRatingFields();render();
+  });
+  updateRatingFields();
   function matches(e,q) { return !q || [e.title,e.description,e.url,e.category,e.note||''].join(' ').toLowerCase().includes(q); }
   function navigate(category=null) { currentCategory=category;currentProjectId=null;ui.search.value='';ui.refreshDescriptionsStatus.hidden=true;ui.refreshDescriptionsStatus.textContent='';render();window.scrollTo({top:0,behavior:'instant'}); }
   function populateCategorySelect(selected='Auto') {

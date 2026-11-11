@@ -36,6 +36,7 @@
           <input id="search-input" type="search" placeholder="Find something you've saved..." autocomplete="off" spellcheck="false">
           <span class="search-shortcut" aria-hidden="true">/</span>
         </label>
+        <div class="saved-filters" aria-label="Filter saved links">
         <div class="saved-date-filter" aria-label="Filter saved links by date">
           <label for="saved-date-mode">Saved</label>
           <select id="saved-date-mode" aria-label="Saved date filter">
@@ -58,6 +59,65 @@
             <input id="saved-date-to" type="date" aria-label="Saved on or before">
           </div>
           <button id="saved-date-clear" type="button" class="text-action" hidden>Clear date</button>
+        </div>
+        <div class="saved-rating-filter" aria-label="Filter saved links by rating">
+          <label for="saved-rating-mode">Rating</label>
+          <select id="saved-rating-mode" aria-label="Rating filter">
+            <option value="any">Any rating</option>
+            <option value="high">High · 8–10</option>
+            <option value="mid">Medium · 5–7</option>
+            <option value="low">Low · 1–4</option>
+            <option value="rated">Rated only</option>
+            <option value="unrated">Unrated only</option>
+            <option value="exact">Specific rating</option>
+            <option value="range">Custom range</option>
+          </select>
+          <div id="saved-rating-exact-fields" class="rating-filter-fields" hidden>
+            <label for="saved-rating-exact">Score</label>
+            <select id="saved-rating-exact" aria-label="Exact rating">
+              <option value="1">1 / 10</option>
+              <option value="2">2 / 10</option>
+              <option value="3">3 / 10</option>
+              <option value="4">4 / 10</option>
+              <option value="5">5 / 10</option>
+              <option value="6">6 / 10</option>
+              <option value="7">7 / 10</option>
+              <option value="8">8 / 10</option>
+              <option value="9">9 / 10</option>
+              <option value="10" selected>10 / 10</option>
+            </select>
+          </div>
+          <div id="saved-rating-range-fields" class="rating-filter-fields" hidden>
+            <label for="saved-rating-min">From</label>
+            <select id="saved-rating-min" aria-label="Minimum rating">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+              <option value="10">10</option>
+            </select>
+            <label for="saved-rating-max">To</label>
+            <select id="saved-rating-max" aria-label="Maximum rating">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+              <option value="10" selected>10</option>
+            </select>
+          </div>
+          <button id="saved-rating-clear" type="button" class="text-action" hidden>Clear rating</button>
+          <span id="saved-rating-error" class="rating-filter-error" role="status" hidden>Minimum rating must not exceed maximum.</span>
+        </div>
         </div>
       </section>
       <section id="projects-section" aria-label="Projects">
@@ -88,7 +148,7 @@
       </section>
     </main>
     <footer class="footer">
-      <span>Prototype v1.13 · Saved locally on this device</span>
+      <span>Prototype v1.14 · Saved locally on this device</span>
       <div class="footer-actions"><button type="button" id="show-share-diagnostics">Share diagnostics</button><button type="button" id="cloud-backup-button">Cloud backup</button><button type="button" id="export-button">Export backup</button><label for="import-input" class="import-label">Import backup</label><input type="file" id="import-input" accept="application/json,.json" hidden></div>
     </footer>
   </div>

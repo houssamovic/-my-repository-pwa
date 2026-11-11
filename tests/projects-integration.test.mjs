@@ -38,7 +38,7 @@ test('local, JSON and encrypted cloud snapshots include projects',()=>{
   assert.match(share,/version:1,exported:new Date\(\)\.toISOString\(\),categories,items,projects/);
   assert.match(app,/projects=projectModel\.sanitize\(data\.projects,safeItems\)/);
   assert.match(app,/projects=projectModel\.sanitize\(data\.projects,items\)/);
-  assert.match(sw,/repository-shell-v1-13-projects/);
+  assert.match(sw,/repository-shell-v1-14-rating-filters/);
   assert.match(sw,/projects\.js/);
 });
 test('AI runs only after explicit user action and never receives recovery credentials',()=>{
