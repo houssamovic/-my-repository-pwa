@@ -50,19 +50,81 @@ function parseAttributes(markup) {
   return result;
 }
 function genuine(value) {
-  const v = cleanText(value);
+  let v = cleanText(value);
   if (v.length < 5) return '';
-  if (/^(instagram|x|twitter|youtube|facebook|log in|sign in|access denied|just a moment|attention required)(?:\s*[-|:.·]\s*.*)?$/i.test(v) && v.length < 65) return '';
-  if (/^(instagram photos and videos|see instagram photos and videos|this content isn't available|login to instagram|instagram post|instagram reel|x post)$/i.test(v)) return '';
-  return v;
+  if (/^(?:instagram|youtube|facebook|twitter|tiktok|x|log in|sign in|access denied|just a moment|attention required)$/i.test(v)) return '';
+  if (/^(?:instagram photos and videos|see instagram photos and videos|this content isn't available|login to instagram|instagram post|instagram reel|x post|join facebook|log into facebook|log in to facebook|sign in to x)/i.test(v)) return '';
+  if (/^(?:create an account|log in to see|sign in to see|watch videos on tiktok|from breaking news and entertainment)/i.test(v)) return '';
+  // Strip attribution only at the end. Don't remove meaningful subject words.
+  v = v.replace(/\s+(?:[-|·]|—)\s+(?:YouTube|Instagram|Facebook|TikTok|X(?:\.com)?|Twitter)\s*$/i,'').trim();
+  return v.length >= 5 ? v : '';
+}
+// Public pages frequently publish structured data rather than a descriptive
+// Open Graph tag. Extract a *single* relevant Article/Recipe/HowTo/Video object.
+// No media or private/social content is downloaded or inferred.
+export function parseStructuredData(html) {
+  const accepted = new Set(['article','newsarticle','blogposting','techarticle','recipe','howto','videoobject','product','review','creativework']);
+  let scanned = 0;
+  for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    if (++scanned > 50) break;
+    if ((parseAttributes(match[1]).type || '').toLowerCase() !== 'application/ld+json') continue;
+    if (match[2].length > 60000) continue;
+    let data;
+    try {data=JSON.parse(match[2].trim().replace(/^<!--|-->$/g,'').trim());} catch {continue;}
+    const queue=Array.isArray(data)?data.slice(0,30):[data];
+    let inspected=0;
+    while(queue.length && ++inspected <= 45) {
+      const obj=queue.shift();
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) continue;
+      if(Array.isArray(obj['@graph'])) queue.push(...obj['@graph'].slice(0,30));
+      const types=[obj['@type']].flat().filter(t=>typeof t==='string').map(t=>t.toLowerCase().split('/').pop());
+      if (!types.some(t=>accepted.has(t))) continue;
+      const title=genuine(typeof obj.headline==='string'?obj.headline:typeof obj.name==='string'?obj.name:'');
+      const description=genuine(typeof obj.description==='string'?obj.description:'');
+      if (title || description) return {title:title.slice(0,250),description:description.slice(0,1200)};
+    }
+  }
+  return {title:'',description:''};
 }
 export function parseMetadata(html) {
-  const metaTags = [...html.matchAll(/<meta\b[^>]*>/gi)].map(m => parseAttributes(m[0]));
+  const metaTags = [...html.matchAll(/<meta\b[^>]*>/gi)].slice(0,200).map(m => parseAttributes(m[0]));
   const get = key => metaTags.find(t => (t.property || t.name || t.itemprop || '').toLowerCase() === key)?.content || '';
   const titleMatch = html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
-  const title = genuine(get('og:title')) || genuine(get('twitter:title')) || genuine(get('title')) || genuine(titleMatch?.[1] || '');
-  const description = genuine(get('og:description')) || genuine(get('twitter:description')) || genuine(get('description')) || '';
+  const structured = parseStructuredData(html);
+  const title = genuine(get('og:title')) || genuine(get('twitter:title')) || genuine(get('title')) || structured.title || genuine(titleMatch?.[1] || '');
+  const description = genuine(get('og:description')) || genuine(get('twitter:description')) || genuine(get('description')) || structured.description || '';
   return {title:title.slice(0,250), description:description.slice(0,1200)};
+}
+
+// YouTube exposes public embed metadata for some videos even when its watch
+// page isn't readable from a server. This is a best-effort title fallback;
+// oEmbed does not provide the video transcript or a reliable description.
+export function youtubeVideoUrl(raw) {
+  try {
+    const url = validateUrl(raw);
+    const host=url.hostname.toLowerCase();
+    let id='';
+    if (host==='youtu.be' || host==='www.youtu.be') id=url.pathname.split('/')[1] || '';
+    else if (['youtube.com','www.youtube.com','m.youtube.com'].includes(host)) {
+      if (url.pathname==='/watch') id=url.searchParams.get('v') || '';
+      else if (/^\/(shorts|live|embed)\//.test(url.pathname)) id=url.pathname.split('/')[2] || '';
+    }
+    return /^[A-Za-z0-9_-]{11}$/.test(id) ? 'https://www.youtube.com/watch?v=' + id : '';
+  } catch {return '';}
+}
+async function youtubeTitle(raw, signal) {
+  const watch=youtubeVideoUrl(raw);
+  if(!watch) return '';
+  const api=new URL('https://www.youtube.com/oembed');
+  api.searchParams.set('url',watch);api.searchParams.set('format','json');
+  const response=await fetch(api.href,{signal,redirect:'error',headers:{'Accept':'application/json'}});
+  if(!response.ok || !/application\/json/i.test(response.headers.get('content-type') || '')) return '';
+  if(Number(response.headers.get('content-length') || 0) > 15000) return '';
+  const payload=await response.text();
+  if(payload.length > 15000) return '';
+  const result=JSON.parse(payload);
+  if(result.provider_name !== 'YouTube') return '';
+  return genuine(result.title).slice(0,250);
 }
 
 async function readPage(start, signal) {
@@ -116,11 +178,12 @@ export async function onRequestGet({request}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const html = await readPage(raw, controller.signal);
-    const fields = parseMetadata(html);
+    let fields = {title:'',description:''};
+    try { fields=parseMetadata(await readPage(raw,controller.signal)); } catch { /* public page may disallow bots */ }
+    if (!fields.title && youtubeVideoUrl(raw)) {
+      try {fields.title=await youtubeTitle(raw,controller.signal);} catch { /* optional provider fallback */ }
+    }
     return json({status:fields.title || fields.description ? 'ok':'unavailable', ...fields});
-  } catch {
-    return json({status:'unavailable',title:'',description:''});
   } finally {
     clearTimeout(timer);
   }
