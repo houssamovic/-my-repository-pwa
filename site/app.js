@@ -43,7 +43,7 @@
     projectsSection: $('projects-section'), projectGrid: $('project-grid'), projectEmpty: $('project-empty'),
     projectTools: $('project-tools'), projectBrief: $('project-brief'), projectStatus: $('project-status'),
     projectChecklist: $('project-checklist'), taskDialog: $('task-dialog'),
-    taskForm: $('task-form'), taskTitle: $('task-title'),
+    taskForm: $('task-form'), taskTitle: $('task-title'), taskDialogTitle: $('task-dialog-title'),
     projectGenerate: $('project-generate'), projectAddLinks: $('project-add-links'),
     projectCalendar: $('project-calendar'), projectEdit: $('project-edit'),
     projectDialog: $('project-dialog'), projectDialogTitle: $('project-dialog-title'),
@@ -319,17 +319,35 @@
       button.textContent=added?'Added to checklist':'Add to checklist';
     }
   }
-  let editingTask=null;
+  let taskDraft=null;
+  function openTaskDialog(project,task=null){
+    taskDraft={projectId:project.id,taskId:task?.id??null};
+    ui.taskDialogTitle.textContent=task?'Edit checklist task':'Add checklist task';
+    ui.taskTitle.value=task?.title||'';
+    ui.taskDialog.showModal();
+    ui.taskTitle.focus();
+  }
   function renderChecklist(project){
     const tasks=project.checklist||[];
-    ui.projectChecklist.hidden=!tasks.length;
+    ui.projectChecklist.hidden=false;
     ui.projectChecklist.replaceChildren();
-    if(!tasks.length)return;
-    const heading=tag('div',{className:'project-brief-heading'});
+    const heading=tag('div',{className:'project-brief-heading checklist-heading'});
+    const add=tag('button',{type:'button',className:'checklist-add',id:'checklist-add-task'},'+ Add task');
+    add.addEventListener('click',()=>{
+      if((project.checklist||[]).length>=projectModel.MAX_TASKS){
+        showToast('This checklist has reached 100 tasks.');
+        return;
+      }
+      openTaskDialog(project);
+    });
     const progress=tag('span',{className:'project-brief-meta',role:'status'});
     const updateProgress=()=>{progress.textContent=project.checklist.filter(task=>task.done).length+' of '+tasks.length+' complete';};
-    updateProgress();
-    heading.append(tag('strong',{},'Preparation checklist'),progress);
+    const title=tag('div',{className:'checklist-heading-title'});
+    title.append(tag('strong',{},'Preparation checklist'));
+    if(tasks.length){updateProgress();title.append(progress);}
+    heading.append(title,add);
+    ui.projectChecklist.append(heading);
+    if(!tasks.length)return;
     const list=tag('ul',{className:'project-checklist-list'});
     for(const task of tasks){
       const row=tag('li',{className:'project-checklist-task'});
@@ -346,12 +364,7 @@
         updateProgress();
       });
       const edit=tag('button',{type:'button',className:'text-action','aria-label':'Edit task: '+task.title},'Edit');
-      edit.addEventListener('click',()=>{
-        editingTask={projectId:project.id,taskId:task.id};
-        ui.taskTitle.value=task.title;
-        ui.taskDialog.showModal();
-        ui.taskTitle.focus();
-      });
+      edit.addEventListener('click',()=>openTaskDialog(project,task));
       const remove=tag('button',{type:'button',className:'text-action','aria-label':'Remove task: '+task.title},'Remove');
       remove.addEventListener('click',()=>{
         if(saveChecklist(project,project.checklist.filter(entry=>entry.id!==task.id))){
@@ -369,7 +382,7 @@
       row.append(actions);
       list.append(row);
     }
-    ui.projectChecklist.append(heading,list);
+    ui.projectChecklist.append(list);
   }
   $('task-close').addEventListener('click',()=>ui.taskDialog.close());
   ui.taskForm.addEventListener('submit',event=>{
@@ -377,14 +390,24 @@
     const project=activeProject();
     const title=ui.taskTitle.value.trim();
     if(!title){ui.taskTitle.focus();return;}
-    if(!project||editingTask?.projectId!==project.id||
-       !project.checklist?.some(task=>task.id===editingTask.taskId)){
+    if(!project||taskDraft?.projectId!==project.id){
       ui.taskDialog.close();
       return;
     }
-    if(saveChecklist(project,project.checklist.map(task=>task.id===editingTask.taskId?{...task,title}:task))){
+    const tasks=project.checklist||[];
+    const taskId=taskDraft.taskId;
+    let next;
+    if(taskId!==null){
+      if(!tasks.some(task=>task.id===taskId)){ui.taskDialog.close();return;}
+      next=tasks.map(task=>task.id===taskId?{...task,title}:task);
+    }else{
+      if(tasks.length>=projectModel.MAX_TASKS){showToast('This checklist has reached 100 tasks.');return;}
+      next=[...tasks,{id:crypto.randomUUID(),title,done:false,detail:'',origin:'',sourceId:''}];
+    }
+    if(saveChecklist(project,next)){
       ui.taskDialog.close();
       renderChecklist(project);
+      if(taskId===null){$('checklist-add-task').focus();showToast('Task added');}
     }
   });
   function navigateProject(id){

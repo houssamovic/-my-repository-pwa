@@ -1,4 +1,4 @@
-const CACHE = 'repository-shell-v1-16-preparation-checklist-actions';
+const CACHE = 'repository-shell-v1-17-manual-checklist-tasks';
 const SHELL = ['./', './index.html', './share.html', './share-receiver.css', './share-receiver.js', './styles.css', './classifier.js', './cloud-vault.js', './date-filter.js', './projects.js', './app.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './favicon.ico'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -158,3 +158,6 @@ dialog{border:none;border-radius:13px;background:#fff;box-shadow:0 24px 85px #1c
 .checklist-task-actions :is(button,a):hover{background:#eef2ed;text-decoration:none}
 .checklist-task-actions button:nth-of-type(2){color:#833d35;border-color:#c8aaa5}
 .checklist-task-actions button:nth-of-type(2):hover{background:#f8eeec}
+
+.checklist-heading .checklist-add{margin-top:0}
+.checklist-heading-title{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}

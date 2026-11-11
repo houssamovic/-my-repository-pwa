@@ -38,7 +38,7 @@ test('local, JSON and encrypted cloud snapshots include projects',()=>{
   assert.match(share,/version:1,exported:new Date\(\)\.toISOString\(\),categories,items,projects/);
   assert.match(app,/projects=projectModel\.sanitize\(data\.projects,safeItems\)/);
   assert.match(app,/projects=projectModel\.sanitize\(data\.projects,items\)/);
-  assert.match(sw,/repository-shell-v1-16-preparation-checklist/);
+  assert.match(sw,/repository-shell-v1-17-manual-checklist-tasks/);
   assert.match(sw,/projects\.js/);
 });
 test('AI runs only after explicit user action and never receives recovery credentials',()=>{
@@ -54,5 +54,12 @@ test('preparation brief offers checklist actions and project view renders saved 
     assert.ok(index.includes('id="'+id+'"'),id);
   assert.match(app,/projectModel\.checklistCandidate\(name,line,sourceId\)/);
   assert.match(app,/renderChecklist\(project\);\s+renderBrief\(\);/);
-  assert.match(app,/saveChecklist\(project,project\.checklist\.map/);
+  assert.match(app,/saveChecklist\(project,next\)/);
+});
+
+test('manual task action is available before a brief exists or any tasks are saved',()=>{
+  assert.match(app,/\+ Add task/);
+  assert.match(app,/ui\.projectChecklist\.append\(heading\);\s+if\(!tasks\.length\)return/);
+  assert.match(app,/openTaskDialog\(project\)/);
+  assert.match(app,/next=\[\.\.\.tasks,\{id:crypto\.randomUUID\(\),title,done:false/);
 });
