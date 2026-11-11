@@ -6,7 +6,7 @@ const source=fs.readFileSync(new URL('../functions/api/classify.js',import.meta.
 const api=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const url='https://my-repository-pwa.pages.dev/api/classify';
 const request=(payload,headers={})=>new Request(url,{method:'POST',headers:{'Content-Type':'application/json',Origin:new URL(url).origin,...headers},body:JSON.stringify(payload)});
-const model=(reply)=>({AI:{run:async()=>({response:reply})}});
+const model=(reply)=>({AI:{run:async()=>({choices:[{index:0,message:{role:'assistant',content:reply},finish_reason:'stop'}]})}});
 
 test('semantic category classification uses trusted model label',async()=>{
  const r=await api.onRequestPost({request:request({title:'How to build a gaming computer for beginners',description:'Step-by-step PC component assembly'}),env:model('Technology')});
@@ -33,4 +33,16 @@ test('works without AI binding by returning not_configured',async()=>{
 test('rejects cross-site browser calls',async()=>{
  const r=await api.onRequestPost({request:request({title:'Car maintenance basics'},{Origin:'https://evil.example'}),env:model('Vehicles')});
  assert.equal(r.status,403);
+});
+
+test('classify diagnostics correctly distinguish AI binding availability',async()=>{
+  const ready=await api.onRequestGet({env:{AI:{run:async()=>({})}}});
+  const missing=await api.onRequestGet({env:{}});
+  assert.deepEqual(await ready.json(),{available:true});
+  assert.deepEqual(await missing.json(),{available:false});
+});
+test('Cloudflare chat completion output is parsed, not silently discarded',async()=>{
+  const response={choices:[{message:{role:'assistant',content:'Gaming'}}]};
+  assert.equal(api.__test.parseLabel(response,['DIY','Gaming']),'Gaming');
+  assert.equal(api.__test.parseLabel({response:'Gaming'},['DIY','Gaming']),'Gaming');
 });
