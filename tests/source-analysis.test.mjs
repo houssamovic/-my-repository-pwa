@@ -88,14 +88,14 @@ test('YouTube Shorts fall back to public title metadata without fetching watch H
 test('coolant video-only evidence cannot generate cited tools or steps', async () => {
   const question = {question:'Which coolant specification and capacity apply to this NMAX?', research:'Find the Yamaha NMAX service manual for the exact model year and check the cooling system specifications.'};
   const request = post('/api/project-brief', {mode:'source-brief', title:'NMAX coolant change', links:[
-    {kind:'youtube_metadata', title:'Video 1', description:'Coolant replacement video', url:'https://youtube.com/watch?v=abcdefghijk'},
+    {kind:'youtube_metadata', title:'Video 1', description:'Coolant replacement video', note:'private note', url:'https://youtube.com/watch?v=abcdefghijk'},
     {kind:'youtube_metadata', title:'Video 2'},
     {kind:'youtube_title', title:'Coolant Short', excerpt:paragraph}
   ]});
   const result = await brief.onRequestPost({request, env:{AI:{run:async (model, input) => {
     const prompt = input.messages[1].content;
     assert.match(prompt, /no footage, audio or transcript/);
-    assert.doesNotMatch(prompt, /youtube\.com\/watch/);
+    assert.doesNotMatch(prompt, /youtube\.com\/watch|private note/);
     return {response:JSON.stringify({
       steps:[{text:'Drain the coolant', source:3, quote}], tools:[{text:'Use a wrench', source:1, quote}],
       questions:[question]
@@ -140,4 +140,12 @@ test('source identifiers survive backup sanitization and old briefs remain reada
   assert.equal(model.sourceAnalysisUrl('https://example.org/article?token=private'), '');
   assert.equal(model.sourceAnalysisUrl('https://example.org/article#private'), 'https://example.org/article');
   assert.equal(model.sourceAnalysisUrl('https://youtu.be/abcdefghijk?si=private'), 'https://www.youtube.com/watch?v=abcdefghijk');
+});
+
+test('source briefs accept twelve bounded excerpts without raising legacy request limits', async () => {
+  const links = Array.from({length:12}, () => ({kind:'article', excerpt:paragraph.repeat(14).slice(0,1600)}));
+  const env = {AI:{run:async () => ({response:'{}'})}};
+  const data = {mode:'source-brief', title:'Coolant change', links};
+  assert.equal((await brief.onRequestPost({request:post('/api/project-brief', data), env})).status, 200);
+  assert.equal((await brief.onRequestPost({request:post('/api/project-brief', {...data, mode:'brief'}), env})).status, 413);
 });
