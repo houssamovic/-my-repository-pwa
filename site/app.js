@@ -412,6 +412,26 @@
     categories.forEach(c=>ui.entryCategory.append(tag('option',{value:c},c)));
     ui.entryCategory.value=selected;
   }
+  function populateProjectSelect(){
+    ui.entryProject.replaceChildren();
+    ui.entryProject.append(tag('option',{value:''},'No project change'));
+    for(const project of projects)ui.entryProject.append(tag('option',{value:project.id},project.title));
+    ui.entryProject.value=currentProjectId||'';
+    projectSelectedByUser=false;
+  }
+  function attachToProject(itemId,projectId){
+    const project=projects.find(p=>p.id===projectId);
+    if(!project||project.linkIds.includes(itemId))return false;
+    project.linkIds.push(itemId);
+    project.brief=null;
+    return true;
+  }
+  function invalidateProjectBriefForItem(itemId){
+    for(const p of projects)if(p.linkIds.includes(itemId)){
+      p.brief=null;
+      if(p.insights)delete p.insights[itemId];
+    }
+  }
   function openEntryDialog(entry=null) {
     editedId=entry?.id || null;
     ui.entryForm.reset();
@@ -421,6 +441,8 @@
     ui.entryDescription.value=entry?.description || '';
     ui.entryNote.value=entry?.note || '';
     populateCategorySelect(entry?.category || (currentCategory || 'Auto'));
+    populateProjectSelect();
+    ui.entryRating.value=projectModel.importance(entry?.rating)===null?'':String(entry.rating);
     categorySelectedByUser=false;
     ui.deleteEntry.hidden=!entry;
     ui.retryDetails.hidden=!entry;
@@ -726,6 +748,7 @@
   });
   $('close-entry-dialog').addEventListener('click',()=>ui.entryDialog.close());
   ui.entryCategory.addEventListener('change',()=>{categorySelectedByUser=true;});
+  ui.entryProject.addEventListener('change',()=>{projectSelectedByUser=true;});
   ui.entryForm.addEventListener('submit',(event)=>{
     event.preventDefault();
     const url=cleanUrl(ui.entryUrl.value);
@@ -746,7 +769,10 @@
       Object.assign(found,{url,title,description,category:nextCategory,
         note:ui.entryNote.value.trim().slice(0,1200),manual:detailsChanged?true:found.manual,
         manualCategory,metaStatus:detailsChanged?'manual':found.metaStatus,
-        aiChecked:detailsChanged||categorySelectedByUser?false:found.aiChecked});
+        aiChecked:detailsChanged||categorySelectedByUser?false:found.aiChecked,
+        rating:projectModel.importance(ui.entryRating.value)});
+      if(detailsChanged||categorySelectedByUser)invalidateProjectBriefForItem(found.id);
+      if(projectSelectedByUser&&ui.entryProject.value)attachToProject(found.id,ui.entryProject.value);
       if(detailsChanged||categorySelectedByUser)aiAttemptedInSession.delete(found.id);
       if (saveData()) {
         ui.entryDialog.close();render();showToast('Saved changes');
@@ -757,8 +783,12 @@
       if (result.error){showToast(result.error);return;}
       ui.entryDialog.close();
       if (result.item) {
-        if (ui.entryNote.value.trim()) {result.item.note=ui.entryNote.value.trim().slice(0,1200);saveData();}
-        navigate(result.item.category);showToast(result.duplicate?'Already saved':'Link saved');
+        if (ui.entryNote.value.trim())result.item.note=ui.entryNote.value.trim().slice(0,1200);
+        result.item.rating=projectModel.importance(ui.entryRating.value);
+        if(ui.entryProject.value)attachToProject(result.item.id,ui.entryProject.value);
+        saveData();
+        if(currentProjectId)navigateProject(currentProjectId);else navigate(result.item.category);
+        showToast(result.duplicate?'Already saved':'Link saved');
         if (result.item.metaStatus === 'pending') void enrichItem(result.item.id);
         else if(result.item.category==='Unsorted'&&!result.item.manualCategory)void classifyUnsorted(result.item.id); }
     }
@@ -775,6 +805,10 @@
     if (!editedId || !confirm('Delete this saved link?')) return;
     const old=items;
     items=items.filter(e=>e.id!==editedId);
+    for(const p of projects)if(p.linkIds.includes(editedId)){
+      p.linkIds=p.linkIds.filter(id=>id!==editedId);p.brief=null;
+      if(p.insights)delete p.insights[editedId];
+    }
     if (saveData()) {ui.entryDialog.close();render();showToast('Link removed');}
     else items=old;
   });
