@@ -131,7 +131,7 @@ async function youtubeTitle(raw, signal) {
 // The key lives only in Cloudflare Pages environment secrets, never in the PWA.
 // This returns the creator-provided description, not a generated transcript.
 // Cache successful responses per video for 6 hours to preserve API quota.
-export async function youtubeSnippet(raw, env, signal) {
+export async function youtubeSnippet(raw, env, signal, diagnostics) {
   const watch=youtubeVideoUrl(raw);
   const key=env?.YOUTUBE_API_KEY;
   if(!watch || typeof key!=='string' || !key.trim()) return null;
@@ -143,7 +143,7 @@ export async function youtubeSnippet(raw, env, signal) {
       const hit=await cache.match(cacheRequest);
       if(hit?.ok) {
         const saved=await hit.json();
-        if(typeof saved?.title==='string' && typeof saved?.description==='string')return saved;
+        if(typeof saved?.title==='string' && typeof saved?.description==='string') {if(diagnostics)diagnostics.youtubeApi='cached';return saved;}
       }
     } catch { /* cache may be unavailable in local tests or previews */ }
   }
@@ -154,13 +154,18 @@ export async function youtubeSnippet(raw, env, signal) {
   const response=await fetch(api.href,{
     signal,redirect:'error',headers:{Accept:'application/json'}
   });
-  if(!response.ok || !/application\/json/i.test(response.headers.get('content-type')||''))return null;
+  if(!response.ok) {
+    if(diagnostics) diagnostics.youtubeApi=response.status===401?'unauthorized':
+      response.status===403?'rejected_or_quota':response.status===429?'rate_limited':'request_failed';
+    return null;
+  }
+  if(!/application\/json/i.test(response.headers.get('content-type')||''))return null;
   if(Number(response.headers.get('content-length')||0)>50000)return null;
   const body=await response.text();
   if(body.length>50000)return null;
   const data=JSON.parse(body);
   const snippet=data?.items?.find(item=>item?.id===id)?.snippet;
-  if(!snippet || typeof snippet.title!=='string')return null;
+  if(!snippet || typeof snippet.title!=='string'){if(diagnostics)diagnostics.youtubeApi='video_not_available';return null;}
   const fields={
     title:genuine(snippet.title).slice(0,250),
     description:genuine(typeof snippet.description==='string'?snippet.description:'').slice(0,1200)
@@ -173,6 +178,7 @@ export async function youtubeSnippet(raw, env, signal) {
       }));
     } catch { /* cache is best effort */ }
   }
+  if(diagnostics)diagnostics.youtubeApi=fields.description?'ok':'creator_description_empty';
   return fields;
 }
 
@@ -222,30 +228,40 @@ async function readPage(start, signal) {
 }
 
 export async function onRequestGet({request,env}) {
-  const raw = new URL(request.url).searchParams.get('url') || '';
+  const input=new URL(request.url);
+  const raw=input.searchParams.get('url') || '';
   try {validateUrl(raw);} catch {return json({status:'unavailable',title:'',description:''}, 400);}
+  const debug=input.searchParams.get('diagnostic')==='1';
+  const youtube=Boolean(youtubeVideoUrl(raw));
+  // This optional status never includes API keys, Google responses, or
+  // account identifiers. Ordinary callers receive the original JSON format.
+  const diagnostics={youtubeApi:youtube?(env?.YOUTUBE_API_KEY?'request_failed':'not_configured'):'not_youtube',source:'none'};
+  const response=(fields)=>json({...fields,...(debug?{diagnostic:diagnostics}:{})});
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const youtube=Boolean(youtubeVideoUrl(raw));
-    // Prefer authoritative video metadata when the owner has configured
-    // the official API; avoid downloading or transcribing video content.
     if(youtube && env?.YOUTUBE_API_KEY) {
       try {
-        const snippet=await youtubeSnippet(raw,env,controller.signal);
-        if(snippet?.title || snippet?.description)
-          return json({status:'ok',title:snippet.title||'',description:snippet.description||''});
-      } catch { /* API rate limits, missing public video or network errors */ }
+        const snippet=await youtubeSnippet(raw,env,controller.signal,diagnostics);
+        if(snippet?.title || snippet?.description) {
+          diagnostics.source='youtube_data_api';
+          return response({status:'ok',title:snippet.title||'',description:snippet.description||''});
+        }
+      } catch { /* fallback; the diagnostic will report request_failed */ }
     }
     let fields = {title:'',description:''};
-    try { fields=parseMetadata(await readPage(raw,controller.signal)); } catch { /* public page may disallow bots */ }
+    try {
+      fields=parseMetadata(await readPage(raw,controller.signal));
+      if(fields.title||fields.description)diagnostics.source='public_html';
+    } catch { /* public page may disallow bots */ }
     if (!fields.title && youtube) {
-      try {fields.title=await youtubeTitle(raw,controller.signal);} catch { /* optional provider fallback */ }
+      try {
+        fields.title=await youtubeTitle(raw,controller.signal);
+        if(fields.title && diagnostics.source==='none')diagnostics.source='youtube_oembed';
+      } catch { /* optional provider fallback */ }
     }
-    return json({status:fields.title || fields.description ? 'ok':'unavailable', ...fields});
-  } finally {
-    clearTimeout(timer);
-  }
+    return response({status:fields.title || fields.description ? 'ok':'unavailable', ...fields});
+  } finally {clearTimeout(timer);}
 }
 
 export function onRequest() {

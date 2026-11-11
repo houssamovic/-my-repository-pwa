@@ -40,14 +40,15 @@
         <div id="category-grid" class="category-grid"></div>
       </section>
       <section id="entries-section" hidden aria-label="Saved links">
-        <div class="section-heading"><h2 id="list-heading">Saved links</h2><div><button id="organize-unsorted-button" type="button" class="text-action" hidden>Organize now</button> <span id="result-count" class="entry-count"></span></div></div>
+        <div class="section-heading"><h2 id="list-heading">Saved links</h2><div class="entry-heading-actions"><button id="organize-unsorted-button" type="button" class="text-action" hidden>Organize now</button> <button id="refresh-descriptions-button" type="button" class="text-action" hidden>Refresh descriptions</button> <span id="result-count" class="entry-count"></span></div></div>
         <p id="organize-status" role="status" aria-live="polite" class="subtitle" hidden></p>
+        <p id="refresh-descriptions-status" role="status" aria-live="polite" class="subtitle" hidden></p>
         <div id="entries-list" class="entries-list"></div>
         <div id="empty-message" class="empty-message" hidden></div>
       </section>
     </main>
     <footer class="footer">
-      <span>Prototype v1.9 · Saved locally on this device</span>
+      <span>Prototype v1.10 · Saved locally on this device</span>
       <div class="footer-actions"><button type="button" id="show-share-diagnostics">Share diagnostics</button><button type="button" id="cloud-backup-button">Cloud backup</button><button type="button" id="export-button">Export backup</button><label for="import-input" class="import-label">Import backup</label><input type="file" id="import-input" accept="application/json,.json" hidden></div>
     </footer>
   </div>

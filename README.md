@@ -51,6 +51,16 @@ Repository therefore captures any meaningful title or caption already included i
 
 This remains **content classification from supplied text**, not audio transcription or automatic video watching. No API key or cloud login is needed to use Repository's existing local-first saving.
 
+## Refresh missing YouTube descriptions (v1.10)
+
+**Problem corrected:** YouTube videos could have been successfully categorized by title while remaining stuck with "Details unavailable from source". The previous **Organize now** tool appeared only in Unsorted, so it could not refresh links already placed in categories like News & Politics.
+
+**New behaviour:** Open any category containing YouTube videos with missing descriptions and select **Refresh descriptions** beside the item count. Repository will retry up to 10 missing YouTube descriptions per click, at most two concurrently, keeping the current title, chosen category, notes and link intact. An optional safe diagnostic explains when the Cloudflare production YOUTUBE_API_KEY secret is missing, the Google request is denied, a video is inaccessible, or the video creator provided no description. Descriptions must be genuinely supplied by the source; Repository doesn't invent them.
+
+The existing `/api/metadata?url=...` response format is unchanged. Appending `&diagnostic=1` returns an additional **sanitized** `diagnostic.youtubeApi` status, which never contains the key, upstream error text or user data. Possible values: `ok`, `cached`, `creator_description_empty`, `not_configured`, `rejected_or_quota`, `unauthorized`, `rate_limited`, `video_not_available`, `request_failed`, `not_youtube`. The creator-written YouTube description may legitimately be blank even with a working API key.
+
+If the Pages secret was just added, redeploy Production. Keep the replacement key private and never paste it in chat or commit it to GitHub. The installed PWA update does not require reinstalling or restoring links.
+
 ## Current scope
 
 - Android installed PWA appears in Share menu. Share URLs, optionally edit title, description, category or note, and return with Android Back.
