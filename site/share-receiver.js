@@ -148,7 +148,7 @@
     if(!item || item.category!=='Unsorted' || item.manualCategory || item.aiChecked || !navigator.onLine) return;
     const title=String(item.title||'').trim(), description=String(item.description||'').trim();
     const usefulTitle=title.length>=8&&!/^(?:youtube|youtube (?:short|video)|instagram (?:post|reel)|x post|facebook post|saved link|link|youtu\.be|(?:www\.|m\.)?youtube\.com|(?:www\.)?instagram\.com|(?:www\.)?(?:x|twitter)\.com)$/i.test(title);
-    const usefulDesc=description.length>=15&&!/^(?:shared link|saved link|details unavailable|description not provided|youtube ·|instagram ·)/i.test(description);
+    const usefulDesc=description.length>=15&&!/^(?:(?:youtube(?: (?:video|short))?|instagram(?: (?:reel|post))?|facebook(?: post)?|tiktok(?: video)?)\s*[·|:-]\s*)?(?:shared link|saved link|details unavailable|description not provided)/i.test(description);
     if(!usefulTitle&&!usefulDesc)return;
     const originalText=title+'\n'+description;
     const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),12000);
