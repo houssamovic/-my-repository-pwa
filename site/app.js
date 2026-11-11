@@ -464,12 +464,19 @@
       if(currentCategory===category){
         const remaining=pendingYouTubeDescriptions(category).length;
         let explanation='';
-        if(diagnostics.has('not_configured'))explanation=' YouTube API is not enabled in this Pages deployment. Check the YOUTUBE_API_KEY secret and redeploy.';
-        else if(diagnostics.has('rejected_or_quota')||diagnostics.has('unauthorized'))explanation=' Google rejected the API request or quota was exceeded. Check the API key restrictions and quota in Google Cloud.';
-        else if(diagnostics.has('rate_limited'))explanation=' YouTube API rate limit reached.';
+        if(diagnostics.has('not_configured'))explanation=' YouTube API key is not available to the production deployment. Check Cloudflare YOUTUBE_API_KEY and redeploy.';
+        else if(diagnostics.has('invalid_key'))explanation=' Google says the YouTube API key is invalid. Check that Cloudflare contains the NEW replacement key, then redeploy.';
+        else if(diagnostics.has('key_restricted'))explanation=' Google blocked the key restrictions. Check application restriction None and API restriction YouTube Data API v3.';
+        else if(diagnostics.has('api_not_enabled'))explanation=' Enable YouTube Data API v3 in the same Google Cloud project as the API key.';
+        else if(diagnostics.has('bad_request'))explanation=' Google returned HTTP 400 (bad request). Verify the replacement key in Google Cloud and Cloudflare.';
+        else if(diagnostics.has('rejected_or_quota')||diagnostics.has('unauthorized'))explanation=' Google denied access (HTTP 401/403). Review key restrictions and YouTube API quotas.';
+        else if(diagnostics.has('quota_exceeded')||diagnostics.has('rate_limited'))explanation=' YouTube API quota or rate limit reached. Check the project quota.';
+        else if(diagnostics.has('timed_out'))explanation=' YouTube API request timed out. Try one link later.';
+        else if(diagnostics.has('network_error'))explanation=' Cloudflare could not connect to YouTube API. Retry, then check Pages Functions logs.';
+        else if(diagnostics.has('http_error'))explanation=' YouTube API returned an HTTP error. Check Google Cloud API metrics and Cloudflare logs.';
         else if(diagnostics.has('creator_description_empty'))explanation=' Some videos have no creator-written description.';
         else if(diagnostics.has('video_not_available'))explanation=' Some videos are not accessible through the public YouTube API.';
-        else if(diagnostics.has('network_error')||diagnostics.has('request_failed'))explanation=' YouTube metadata requests failed. Check the Cloudflare deployment and connection.';
+        else if(diagnostics.has('request_failed')||diagnostics.has('network_error'))explanation=' YouTube metadata request failed. Inspect Google Cloud API metrics.';
         else if(!updated)explanation=' The source did not provide a description for these videos.';
         ui.refreshDescriptionsStatus.textContent='Retrieved '+updated+' of '+targets.length+' missing descriptions.'+explanation+(remaining>0?' '+remaining+' still need descriptions.':'');
         render();

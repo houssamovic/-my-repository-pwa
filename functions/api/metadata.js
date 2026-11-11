@@ -131,6 +131,27 @@ async function youtubeTitle(raw, signal) {
 // The key lives only in Cloudflare Pages environment secrets, never in the PWA.
 // This returns the creator-provided description, not a generated transcript.
 // Cache successful responses per video for 6 hours to preserve API quota.
+// Map only recognized Google error codes to safe statuses. Never expose the
+// response body, key or Google error message to a browser client.
+function youtubeApiError(status, body) {
+  let reasons=[];
+  try {
+    const parsed=JSON.parse(body);
+    reasons=[
+      ...(Array.isArray(parsed?.error?.details)?parsed.error.details.map(x=>x?.reason):[]),
+      ...(Array.isArray(parsed?.error?.errors)?parsed.error.errors.map(x=>x?.reason):[])
+    ].filter(x=>typeof x==='string');
+  } catch { /* Non-JSON error from Google */ }
+  if(reasons.some(r=>/^(API_KEY_INVALID|keyInvalid)$/i.test(r)))return 'invalid_key';
+  if(reasons.some(r=>/^(API_KEY_SERVICE_BLOCKED|API_KEY_HTTP_REFERRER_BLOCKED|API_KEY_IP_ADDRESS_BLOCKED|ipRefererBlocked|API_KEY_ANDROID_APP_BLOCKED)$/i.test(r)))return 'key_restricted';
+  if(reasons.some(r=>/^(SERVICE_DISABLED|accessNotConfigured)$/i.test(r)))return 'api_not_enabled';
+  if(reasons.some(r=>/^(QUOTA_EXCEEDED|quotaExceeded|dailyLimitExceeded|rateLimitExceeded)$/i.test(r)))return 'quota_exceeded';
+  if(status===401)return 'unauthorized';
+  if(status===429)return 'rate_limited';
+  if(status===403)return 'rejected_or_quota';
+  if(status===400)return 'bad_request';
+  return 'http_error';
+}
 export async function youtubeSnippet(raw, env, signal, diagnostics) {
   const watch=youtubeVideoUrl(raw);
   const key=env?.YOUTUBE_API_KEY;
@@ -155,8 +176,16 @@ export async function youtubeSnippet(raw, env, signal, diagnostics) {
     signal,redirect:'error',headers:{Accept:'application/json'}
   });
   if(!response.ok) {
-    if(diagnostics) diagnostics.youtubeApi=response.status===401?'unauthorized':
-      response.status===403?'rejected_or_quota':response.status===429?'rate_limited':'request_failed';
+    let errorBody='';
+    try {
+      if(Number(response.headers.get('content-length')||0)<=12000) {
+        errorBody=(await response.text()).slice(0,12000);
+      }
+    } catch { /* report safe HTTP status regardless */ }
+    if(diagnostics) {
+      diagnostics.youtubeApi=youtubeApiError(response.status,errorBody);
+      diagnostics.youtubeHttpStatus=response.status;
+    }
     return null;
   }
   if(!/application\/json/i.test(response.headers.get('content-type')||''))return null;
@@ -247,7 +276,7 @@ export async function onRequestGet({request,env}) {
           diagnostics.source='youtube_data_api';
           return response({status:'ok',title:snippet.title||'',description:snippet.description||''});
         }
-      } catch { /* fallback; the diagnostic will report request_failed */ }
+      } catch { diagnostics.youtubeApi=controller.signal.aborted?'timed_out':'network_error'; }
     }
     let fields = {title:'',description:''};
     try {
