@@ -677,6 +677,158 @@
       ui.organizeButton.disabled=false;
     }
   });
+  function openProjectEditor(project=null){
+    editingProjectId=project?.id||null;
+    ui.projectForm.reset();
+    ui.projectDialogTitle.textContent=project?'Edit project':'New project';
+    ui.projectName.value=project?.title||'';
+    ui.projectPurpose.value=project?.purpose||'';
+    ui.projectDate.value=project?.date||'';
+    ui.projectDelete.hidden=!project;
+    ui.projectDialog.showModal();
+    ui.projectName.focus();
+  }
+  $('new-project-button').addEventListener('click',()=>openProjectEditor());
+  $('project-close').addEventListener('click',()=>ui.projectDialog.close());
+  ui.projectEdit.addEventListener('click',()=>{const p=activeProject();if(p)openProjectEditor(p);});
+  ui.projectForm.addEventListener('submit',event=>{
+    event.preventDefault();
+    const title=ui.projectName.value.trim().slice(0,projectModel.NAME_LIMIT);
+    if(!title){ui.projectName.reportValidity();return;}
+    const date=ui.projectDate.value;
+    if(date&&!projectModel.validDate(date)){showToast('Choose a valid target date');return;}
+    const purpose=ui.projectPurpose.value.trim().slice(0,projectModel.PURPOSE_LIMIT);
+    let project=editingProjectId?projects.find(p=>p.id===editingProjectId):null;
+    if(project){
+      if(project.title!==title||project.purpose!==purpose||project.date!==date)project.brief=null;
+      Object.assign(project,{title,purpose,date});
+    } else {
+      if(projects.length>=projectModel.MAX_PROJECTS){showToast('Maximum 80 projects. Delete an unused project first.');return;}
+      project={id:crypto.randomUUID?.()||'project-'+Date.now()+'-'+Math.random(),title,purpose,date,
+        created:new Date().toISOString(),linkIds:[],brief:null,insights:{}};
+      projects.unshift(project);
+    }
+    if(saveData()){ui.projectDialog.close();navigateProject(project.id);showToast('Project saved');}
+  });
+  ui.projectDelete.addEventListener('click',()=>{
+    const p=projects.find(p=>p.id===editingProjectId);
+    if(!p||!confirm('Delete project "'+p.title+'"? Saved links will remain in Repository.'))return;
+    projects=projects.filter(x=>x.id!==p.id);
+    if(saveData()){ui.projectDialog.close();navigate();showToast('Project deleted. Saved links kept.');}
+  });
+  let projectPickerSelection=new Set();
+  function renderProjectPicker(){
+    const q=ui.projectPickerSearch.value.toLowerCase().trim();
+    ui.projectPickerList.replaceChildren();
+    const matches=items.filter(x=>[x.title,x.category,x.description,x.note||''].join(' ').toLowerCase().includes(q));
+    if(!matches.length){ui.projectPickerList.append(tag('p',{className:'project-privacy-note'},'No links match your search.'));return;}
+    if(matches.length>100)ui.projectPickerList.append(tag('p',{className:'project-privacy-note'},'Showing the first 100 results. Search to find more links.'));
+    for(const item of matches.slice(0,100)){
+      const label=tag('label',{className:'project-picker-option'});
+      const check=tag('input',{type:'checkbox'});
+      check.checked=projectPickerSelection.has(item.id);
+      check.addEventListener('change',()=>{
+        if(check.checked)projectPickerSelection.add(item.id);
+        else projectPickerSelection.delete(item.id);
+      });
+      const text=tag('span');
+      text.append(tag('strong',{},item.title),tag('small',{},item.category));
+      label.append(check,text);ui.projectPickerList.append(label);
+    }
+  }
+  ui.projectAddLinks.addEventListener('click',()=>{
+    const p=activeProject();if(!p)return;
+    projectPickerSelection=new Set(p.linkIds);
+    ui.projectPickerSearch.value='';renderProjectPicker();ui.projectPicker.showModal();
+  });
+  $('project-picker-close').addEventListener('click',()=>ui.projectPicker.close());
+  ui.projectPickerSearch.addEventListener('input',renderProjectPicker);
+  $('project-picker-save').addEventListener('click',()=>{
+    const p=activeProject();if(!p){ui.projectPicker.close();return;}
+    if(projectPickerSelection.size>250){showToast('A project supports up to 250 links.');return;}
+    const before=p.linkIds.join('|');
+    p.linkIds=items.filter(e=>projectPickerSelection.has(e.id)).map(e=>e.id);
+    if(before!==p.linkIds.join('|')){
+      p.brief=null;
+      for(const id of Object.keys(p.insights))if(!projectPickerSelection.has(id))delete p.insights[id];
+    }
+    if(saveData()){ui.projectPicker.close();render();showToast('Project links updated');}
+  });
+  function aiSource(item){
+    // No URL is sent; placeholders cannot masquerade as actual source material.
+    const placeholder=/^(?:details unavailable from source|description not provided by source|(?:youtube|instagram|tiktok|facebook).*(?:content not analyzed))$/i;
+    const description=String(item.description||'').trim();
+    return {title:String(item.title||'').slice(0,170),
+      description:placeholder.test(description)?'':description.slice(0,420),
+      note:String(item.note||'').slice(0,100),rating:projectModel.importance(item.rating)};
+  }
+  function projectAiBody(project,mode,item=null) {
+    const sources=(item?[item]:project.linkIds.map(id=>items.find(x=>x.id===id)).filter(Boolean))
+      .sort((a,b)=>(projectModel.importance(b.rating)||0)-(projectModel.importance(a.rating)||0))
+      .slice(0,12).map(aiSource);
+    return {mode,title:project.title,purpose:project.purpose,date:project.date,links:sources};
+  }
+  async function requestProjectAi(payload,signal){
+    const response=await fetch(PROJECT_AI_ENDPOINT,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload),cache:'no-store',signal
+    });
+    const result=await response.json().catch(()=>({status:'invalid_ai_response'}));
+    if(!response.ok || result.status!=='ok'){
+      if(result.status==='not_configured')throw Error('Cloudflare AI is not connected to this deployment.');
+      if(result.status==='insufficient_information')throw Error('Add a link with some readable information before requesting a brief.');
+      throw Error('AI preparation is currently unavailable. Your saved links are unchanged.');
+    }
+    return result;
+  }
+  ui.projectGenerate.addEventListener('click',async()=>{
+    const p=activeProject();if(!p||ui.projectGenerate.disabled)return;
+    if(!p.linkIds.length){showToast('Add saved links to the project first.');return;}
+    ui.projectGenerate.disabled=true;
+    ui.projectStatus.hidden=false;
+    ui.projectStatus.textContent='Preparing a brief from available source details…';
+    const before=JSON.stringify({title:p.title,purpose:p.purpose,date:p.date,linkIds:p.linkIds,links:p.linkIds.map(id=>items.find(x=>x.id===id))});
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
+    try{
+      const data=await requestProjectAi(projectAiBody(p,'brief'),controller.signal);
+      if(!projects.includes(p))return;
+      const after=JSON.stringify({title:p.title,purpose:p.purpose,date:p.date,linkIds:p.linkIds,links:p.linkIds.map(id=>items.find(x=>x.id===id))});
+      if(before!==after){ui.projectStatus.textContent='Project changed while preparing. Run Prepare with AI again.';return;}
+      p.brief=projectModel.safeBrief({...data,generated:new Date().toISOString()});
+      if(!p.brief)throw Error('The AI response was incomplete. Try again.');
+      if(saveData()){
+        render();
+        ui.projectStatus.hidden=false;
+        ui.projectStatus.textContent='Preparation saved. Check the original sources before following any steps.';
+      }
+    }catch(error){ui.projectStatus.textContent=error?.name==='AbortError'?'AI preparation timed out. Try again.':error.message||'Preparation unavailable.';}
+    finally{clearTimeout(timer);ui.projectGenerate.disabled=false;}
+  });
+  async function explainProjectLink(projectId,itemId,button){
+    const p=projects.find(x=>x.id===projectId),item=items.find(x=>x.id===itemId);
+    if(!p||!item||!p.linkIds.includes(itemId)||button.disabled)return;
+    button.disabled=true;button.textContent='Checking…';
+    const original=JSON.stringify({purpose:p.purpose,title:p.title,url:item.url,description:item.description,note:item.note});
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),18000);
+    try{
+      const data=await requestProjectAi(projectAiBody(p,'relevance',item),controller.signal);
+      if(!projects.includes(p)||!p.linkIds.includes(itemId))return;
+      if(original!==JSON.stringify({purpose:p.purpose,title:p.title,url:item.url,description:item.description,note:item.note}))return;
+      p.insights[itemId]=String(data.relevance||'').slice(0,600);
+      if(saveData())render();
+    }catch(error){showToast(error?.name==='AbortError'?'AI request timed out.':error.message||'Could not assess this link.');}
+    finally{clearTimeout(timer);button.disabled=false;button.textContent='Why relevant?';}
+  }
+  ui.projectCalendar.addEventListener('click',()=>{
+    const p=activeProject();if(!p)return;
+    const data=projectModel.calendar(p);
+    if(!data){showToast('Set a target date in the project first.');return;}
+    const blob=new Blob([data],{type:'text/calendar;charset=utf-8'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='repository-'+p.date+'.ics';
+    document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2500);
+    showToast('Calendar event downloaded. Import it to activate a reminder.');
+  });
   function recordShare(params, status, detail) {
     // Store diagnostic metadata locally only. Do not persist shared text or full URLs.
     const data = {
