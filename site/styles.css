@@ -41,3 +41,22 @@ dialog{border:none;border-radius:13px;background:#fff;box-shadow:0 24px 85px #1c
 /* Keep small category utility actions readable on phone screens. */
 .entry-heading-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px 12px}
 @media(max-width:470px){.section-heading{gap:7px;align-items:flex-start}.section-heading h2{white-space:nowrap}.entry-heading-actions{max-width:58%;column-gap:9px}.entry-heading-actions .text-action{font-size:11px}}
+
+
+/* Saved-date filters remain lightweight on the homepage and inside categories. */
+.saved-date-filter{display:flex;align-items:center;flex-wrap:wrap;gap:9px 12px;margin-top:15px;font-size:12px;color:#777e75}
+.saved-date-filter>label{font-weight:600;letter-spacing:.2px}
+.saved-date-filter select,.saved-date-filter input[type="date"]{border:1px solid #e1e3de;border-radius:7px;background:#fff;color:#3b4039;padding:9px 10px;min-height:38px;font-size:12px;max-width:100%;color-scheme:light}
+.saved-date-filter select{min-width:132px}
+.saved-date-filter .date-filter-fields{display:flex;align-items:center;gap:7px 10px;flex-wrap:wrap}
+.saved-date-filter .date-filter-fields[hidden],.saved-date-filter [hidden]{display:none!important}
+.saved-date-filter .text-action{white-space:nowrap}
+.entry-saved-date{color:#979d95;font-size:11px;font-weight:400;line-height:1.4;margin-top:8px;letter-spacing:.1px}
+@media(max-width:750px){
+  .saved-date-filter{margin-top:12px;gap:8px 10px}
+  .saved-date-filter select,.saved-date-filter input[type="date"]{min-height:37px;padding:8px}
+  .saved-date-filter .date-filter-fields{width:100%}
+  .saved-date-filter .date-filter-fields label{font-size:11px}
+  .entry-saved-date{margin-top:5px}
+}
+@media(max-width:390px){.saved-date-filter input[type="date"]{max-width:140px;font-size:11px}}
