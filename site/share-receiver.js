@@ -3,15 +3,10 @@
   const ITEMS_KEY = 'repository-v1-items';
   const CATEGORIES_KEY = 'repository-v1-categories';
   const SHARE_LOG_KEY = 'repository-v12-share-log';
+  const CLOUD_DIRTY = 'repository-cloud-dirty-v1';
+  let cloudTimer;
   const META_ENDPOINT = '/api/metadata';
   const DEFAULT_CATEGORIES = ['DIY', 'Food & Recipes', 'Travel', 'Technology', 'Reading', 'Unsorted'];
-  const CATEGORY_TERMS = {
-    'DIY': ['diy','drywall','plaster','woodwork','carpentry','screw','drill','repair','renovation','shelving','plumbing','faucet','home improvement'],
-    'Food & Recipes': ['recipe','cooking','baking','food','pasta','pizza','dinner','ingredients','bread dough'],
-    'Travel': ['travel','vacation','flight','hotel','itinerary','road trip','tourism','sightseeing'],
-    'Technology': ['technology','coding','programming','software','machine learning','smartphone','robotics','developer'],
-    'Reading': ['novel','literature','book review','reading list','poetry']
-  };
   const $ = (id) => document.getElementById(id);
   const ui = {
     heading: $('capture-heading'), detail: $('capture-status-detail'), content: $('capture-content'),
@@ -67,18 +62,32 @@
       (text && text.length<=120 ? text : '') || fallbackTitle(href);
     return {url:href, title:title.slice(0,250), description:(text && text!==title ? text : `${sourceKind(href)} · Shared link (content not analyzed)`).slice(0,1200)};
   }
-  function inferCategory(title,desc,url) {
-    let path='';try {path=decodeURIComponent(new URL(url).pathname);}catch{}
-    const sample = `${title} ${desc} ${path}`.toLowerCase();
-    const scored = Object.entries(CATEGORY_TERMS).map(([cat,terms])=>({cat,score:terms.reduce((n,t)=>n+(sample.includes(t)?(t.includes(' ')?3:2):0),0)})).sort((a,b)=>b.score-a.score);
-    return scored[0]?.score > 0 && scored[0].score > (scored[1]?.score||0) ? scored[0].cat:'Unsorted';
+  function inferCategory(title,description,url) {
+    const decision=globalThis.RepositoryClassifier.classify({title,description,url,existingCategories:categories});
+    if(decision.category!=='Unsorted' && !categories.includes(decision.category)) categories.splice(categories.length-1,0,decision.category);
+    return decision.category;
   }
   let items=readJSON(ITEMS_KEY, []);if(!Array.isArray(items))items=[];
   let categories=readJSON(CATEGORIES_KEY, DEFAULT_CATEGORIES);if(!Array.isArray(categories))categories=[...DEFAULT_CATEGORIES];
   categories=[...new Set([...DEFAULT_CATEGORIES.filter(c=>c!=='Unsorted'),...categories.filter(c=>typeof c==='string'&&c!=='Unsorted'&&c.trim()&&c.length<=45),'Unsorted'])];
   let active=null;let edited = {title:false,description:false,category:false,note:false};
   function persist() {
-    try {localStorage.setItem(ITEMS_KEY,JSON.stringify(items));localStorage.setItem(CATEGORIES_KEY,JSON.stringify(categories));return true;}
+    try {
+      localStorage.setItem(ITEMS_KEY,JSON.stringify(items));localStorage.setItem(CATEGORIES_KEY,JSON.stringify(categories));
+      if(globalThis.RepositoryVault?.recovery()) {
+        localStorage.setItem(CLOUD_DIRTY,crypto.randomUUID());
+        clearTimeout(cloudTimer);
+        cloudTimer=setTimeout(async()=>{
+          if(!navigator.onLine)return;
+          try {
+            const token=localStorage.getItem(CLOUD_DIRTY);
+            await globalThis.RepositoryVault.backUp({version:1,exported:new Date().toISOString(),categories,items});
+            if(localStorage.getItem(CLOUD_DIRTY)===token)localStorage.removeItem(CLOUD_DIRTY);
+          } catch { /* Retry when the main app is opened. */ }
+        },800);
+      }
+      return true;
+    }
     catch {return false;}
   }
   function logShare(params,status,detail) {

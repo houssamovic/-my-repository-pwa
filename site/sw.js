@@ -1,5 +1,5 @@
-const CACHE = 'repository-shell-v1-6-cloudflare';
-const SHELL = ['./', './index.html', './share.html', './share-receiver.css', './share-receiver.js', './styles.css', './app.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './favicon.ico'];
+const CACHE = 'repository-shell-v1-8-backup';
+const SHELL = ['./', './index.html', './share.html', './share-receiver.css', './share-receiver.js', './styles.css', './classifier.js', './cloud-vault.js', './app.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './favicon.ico'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });

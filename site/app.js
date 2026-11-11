@@ -4,17 +4,12 @@
   const ITEMS_KEY = 'repository-v1-items';
   const CATEGORIES_KEY = 'repository-v1-categories';
   const SHARE_LOG_KEY = 'repository-v12-share-log';
+  const CLOUD_DIRTY = 'repository-cloud-dirty-v1';
+  let cloudTimer;
   const META_ENDPOINT = '/api/metadata';
   const inFlightMetadata = new Set();
   const DEFAULT_CATEGORIES = ['DIY', 'Food & Recipes', 'Travel', 'Technology', 'Reading', 'Unsorted'];
   const MAX_ITEMS = 20000;
-  const CATEGORY_TERMS = {
-    'DIY': ['diy', 'drywall', 'plaster', 'woodwork', 'carpentry', 'saw', 'screw', 'drill', 'repair', 'renovation', 'paint wall', 'build shelf', 'shelving', 'home improvement', 'plumbing', 'faucet', 'tools'],
-    'Food & Recipes': ['recipe', 'recipes', 'cooking', 'baking', 'food', 'pasta', 'pizza', 'ingredients', 'chicken dinner', 'meal prep', 'bread dough', 'cuisine'],
-    'Travel': ['travel', 'vacation', 'holiday destinations', 'flight', 'hotel', 'itinerary', 'roadtrip', 'road trip', 'tourism', 'sightseeing', 'visit lisbon'],
-    'Technology': ['technology', 'coding', 'programming', 'javascript', 'artificial intelligence', 'machine learning', 'software', 'laptop', 'smartphone', 'gadget', 'developer', 'robotics', 'computer science'],
-    'Reading': ['novel', 'literature', 'book review', 'books to read', 'poetry', 'author interview', 'reading list']
-  };
   const $ = (id) => document.getElementById(id);
   const ui = {
     home: $('home-button'), add: $('add-button'), back: $('back-button'),
@@ -46,6 +41,13 @@
       e.metaStatus = 'pending'; e.metaAttempts = 0;
     }
   }
+  // Revisit only auto-sorted links; do not override the user's own category.
+  for(const item of items) {
+    if(item.category === 'Unsorted' && !item.manualCategory) {
+      const guess = inferCategory(item.title,item.description,item.url);
+      if(guess!=='Unsorted') item.category=guess;
+    }
+  }
   let currentCategory = null;
   let editedId = null;
   let toastTimer = null;
@@ -54,11 +56,24 @@
     try {
       localStorage.setItem(ITEMS_KEY, JSON.stringify(items));
       localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+      if (globalThis.RepositoryVault?.recovery()) { localStorage.setItem(CLOUD_DIRTY,crypto.randomUUID()); scheduleCloudBackup(); }
       return true;
     } catch {
       showToast('Device storage is full or unavailable. Export a backup.');
       return false;
     }
+  }
+  function scheduleCloudBackup() {
+    clearTimeout(cloudTimer);
+    cloudTimer=setTimeout(async()=>{
+      if(!navigator.onLine || !globalThis.RepositoryVault?.recovery())return;
+      try {
+        const token=localStorage.getItem(CLOUD_DIRTY);
+        await globalThis.RepositoryVault.backUp({version:1,exported:new Date().toISOString(),categories,items});
+        if (localStorage.getItem(CLOUD_DIRTY)===token) localStorage.removeItem(CLOUD_DIRTY);
+        else scheduleCloudBackup();
+      } catch { /* The local copy is safe; retry on next online launch. */ }
+    },4000);
   }
   function showToast(message) {
     clearTimeout(toastTimer);
@@ -118,12 +133,12 @@
     } catch { return 'Saved link'; }
   }
   function inferCategory(title, description, url) {
-    let u;
-    try { u = new URL(url); } catch { return 'Unsorted'; }
-    const sample = `${title} ${description} ${decodeURIComponent(u.pathname)}`.toLowerCase();
-    const scored = Object.entries(CATEGORY_TERMS).map(([cat, terms]) => ({cat, score: terms.reduce((n, term) => n + (sample.includes(term) ? (term.includes(' ') ? 3 : 2) : 0), 0)})).sort((a,b)=>b.score-a.score);
-    if (scored.length && scored[0].score > 0 && (scored.length === 1 || scored[0].score > scored[1].score)) return scored[0].cat;
-    return 'Unsorted';
+    const decision = globalThis.RepositoryClassifier.classify({title,description,url,existingCategories:categories});
+    if (decision.category !== 'Unsorted' && !categories.includes(decision.category)) {
+      // Create a new tile only when the actual content justifies it.
+      categories.splice(categories.length-1, 0, decision.category);
+    }
+    return decision.category;
   }
   function parseShare(params) {
     const shareTitle = (params.get('title') || '').trim();
@@ -433,6 +448,89 @@
     } catch {showToast('Invalid backup file');}
   });
 
+  saveData();
+
+  // Optional encrypted cloud backup. It never silently replaces local data.
+  const cloudDialog = $('cloud-backup-dialog');
+  const cloudStatus = $('cloud-status');
+  const recoveryInput = $('cloud-recovery');
+  const cloudCreate = $('cloud-create');
+  const cloudSave = $('cloud-save');
+  const cloudRestore = $('cloud-restore');
+  const cloudCopy = $('cloud-copy');
+  const cloudDisconnect = $('cloud-disconnect');
+  const vault = globalThis.RepositoryVault;
+  const backupSnapshot = () => ({version:1,exported:new Date().toISOString(),categories,items});
+  const vaultMessage = (message) => {cloudStatus.textContent=message;};
+  function setVaultButtons(enabled) {
+    cloudCreate.disabled=!enabled;
+    cloudSave.disabled=!enabled || !vault.recovery();
+    cloudRestore.disabled=!enabled;
+  }
+  $('cloud-backup-button').addEventListener('click', async () => {
+    cloudDialog.showModal();
+    vaultMessage('Checking cloud backup availability…');
+    setVaultButtons(false);
+    const available=await vault.status();
+    if (!cloudDialog.open) return;
+    setVaultButtons(available);
+    vaultMessage(!available ? 'Cloud backup is not configured yet. Your links remain saved on this device.' :
+      vault.recovery() ? (localStorage.getItem(CLOUD_DIRTY) ? 'Cloud backup connected, with changes pending upload. Use Back up changes to retry.' : 'Encrypted cloud backup connected. Changes back up automatically while online.') :
+      'Cloud backup is available. Create a backup, or paste an existing recovery code to restore.');
+  });
+  $('close-cloud-dialog').addEventListener('click',()=>cloudDialog.close());
+  cloudCreate.addEventListener('click', async () => {
+    cloudCreate.disabled=true;
+    vaultMessage('Encrypting your collection…');
+    try {
+      const code=await vault.create(backupSnapshot());
+      localStorage.removeItem(CLOUD_DIRTY);
+      recoveryInput.value=code;
+      vaultMessage('Encrypted backup created. Save the recovery code securely before closing this screen.');
+      cloudSave.disabled=false;
+    } catch(e){vaultMessage(e.message||'Could not create backup');}
+    finally{cloudCreate.disabled=false;}
+  });
+  cloudSave.addEventListener('click',async()=>{
+    cloudSave.disabled=true;vaultMessage('Encrypting and backing up…');
+    try{const token=localStorage.getItem(CLOUD_DIRTY);await vault.backUp(backupSnapshot());if(localStorage.getItem(CLOUD_DIRTY)===token)localStorage.removeItem(CLOUD_DIRTY);vaultMessage('Cloud backup updated.');}
+    catch(e){vaultMessage(e.message||'Backup failed. Local links are unchanged.');}
+    finally{cloudSave.disabled=false;}
+  });
+  cloudRestore.addEventListener('click',async()=>{
+    const code=recoveryInput.value.trim()||vault.recovery();
+    cloudRestore.disabled=true;vaultMessage('Reading encrypted backup…');
+    try {
+      const result=await vault.load(code);
+      const data=result.snapshot;
+      if(!data||data.version!==1||!Array.isArray(data.items)||!Array.isArray(data.categories)||data.items.length>MAX_ITEMS) throw new Error('Invalid backup format');
+      const safeCategories=[...new Set([...DEFAULT_CATEGORIES,...data.categories.filter(c=>typeof c==='string'&&c.trim().length&&c.length<=45)])];
+      const safeItems=data.items.filter(e=>e && cleanUrl(e.url)&&typeof e.title==='string'&&typeof e.description==='string'&&typeof e.category==='string').map(e=>({...e,id:String(e.id||crypto.randomUUID()),url:cleanUrl(e.url),title:e.title.slice(0,250),description:e.description.slice(0,1200),note:String(e.note||'').slice(0,1200),category:safeCategories.includes(e.category)?e.category:'Unsorted'}));
+      if(!confirm(`Restore ${safeItems.length} links? This REPLACES your ${items.length} locally saved links on this device. Export a local backup first if you want to preserve them.`)) {vaultMessage('Restore cancelled.');return;}
+      const originalItems=items,originalCategories=categories;
+      items=safeItems;categories=safeCategories;
+      if(!saveData()){items=originalItems;categories=originalCategories;throw new Error('Not enough device storage');}
+      vault.remember(code,result.revision);
+      localStorage.removeItem(CLOUD_DIRTY);
+      recoveryInput.value='';
+      setVaultButtons(true);
+      navigate();vaultMessage(`Restored ${items.length} links. Cloud backup connected.`);
+    } catch(e){vaultMessage(e.message||'Could not restore. Local links are unchanged.');}
+    finally{cloudRestore.disabled=false;}
+  });
+  cloudCopy.addEventListener('click',async()=>{
+    const code=vault.recovery();
+    if(!code){vaultMessage('Create or restore a backup first.');return;}
+    try{await navigator.clipboard.writeText(code);vaultMessage('Recovery code copied. Keep it private.');}
+    catch{recoveryInput.value=code;recoveryInput.focus();recoveryInput.select();vaultMessage('Select and copy the recovery code shown here.');}
+  });
+  cloudDisconnect.addEventListener('click',()=>{
+    if(!vault.recovery())return;
+    if(!confirm('Disconnect this device? Your local links will remain. To reconnect later, you will need your saved recovery code.'))return;
+    vault.forget();localStorage.removeItem(CLOUD_DIRTY);recoveryInput.value='';cloudSave.disabled=true;
+    vaultMessage('Disconnected. Your local links are unchanged.');
+  });
+
   render();
   handleShare();
   if ('serviceWorker' in navigator) {
@@ -443,7 +541,8 @@
       }).catch(()=>{});
     });
   }
-  window.addEventListener('online', resumeMetadata);
+  window.addEventListener('online', () => {resumeMetadata();scheduleCloudBackup();});
   document.addEventListener('visibilitychange', () => { if (!document.hidden) resumeMetadata(); });
   resumeMetadata();
+  if (vault.recovery() && localStorage.getItem(CLOUD_DIRTY)) scheduleCloudBackup();
 })();

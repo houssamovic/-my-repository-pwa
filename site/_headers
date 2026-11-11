@@ -23,3 +23,8 @@
   Cache-Control: public, max-age=0, must-revalidate
 /share-receiver.css
   Cache-Control: public, max-age=0, must-revalidate
+
+/classifier.js
+  Cache-Control: public, max-age=0, must-revalidate
+/cloud-vault.js
+  Cache-Control: public, max-age=0, must-revalidate

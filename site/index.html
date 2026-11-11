@@ -12,6 +12,8 @@
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <link rel="stylesheet" href="/styles.css">
   <title>Repository</title>
+  <script defer src="/classifier.js"></script>
+  <script defer src="/cloud-vault.js"></script>
   <script defer src="/app.js"></script>
 </head>
 <body>
@@ -44,8 +46,8 @@
       </section>
     </main>
     <footer class="footer">
-      <span>Prototype v1.5 · Saved locally on this device</span>
-      <div class="footer-actions"><button type="button" id="show-share-diagnostics">Share diagnostics</button><button type="button" id="export-button">Export backup</button><label for="import-input" class="import-label">Import backup</label><input type="file" id="import-input" accept="application/json,.json" hidden></div>
+      <span>Prototype v1.6 · Saved locally on this device</span>
+      <div class="footer-actions"><button type="button" id="show-share-diagnostics">Share diagnostics</button><button type="button" id="cloud-backup-button">Cloud backup</button><button type="button" id="export-button">Export backup</button><label for="import-input" class="import-label">Import backup</label><input type="file" id="import-input" accept="application/json,.json" hidden></div>
     </footer>
   </div>
   <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
@@ -78,6 +80,17 @@
     <p>Last 5 share attempts on this device. This information is not sent anywhere.</p>
     <div id="share-diagnostics-list" class="share-diagnostics-list"></div>
     <div class="dialog-actions"><button class="button primary" type="button" id="test-share-button">Test saving a sample link</button></div>
+  </dialog>
+  <dialog id="cloud-backup-dialog" class="editor-dialog">
+    <div class="dialog-top"><h2>Encrypted cloud backup</h2><button type="button" id="close-cloud-dialog" class="close-button" aria-label="Close">×</button></div>
+    <p id="cloud-status">Checking cloud service…</p>
+    <p>This is an optional private backup. Changes upload automatically while online after setup, but this is not live multi-device synchronization. Your links are encrypted on your device before upload. Only your recovery code can decrypt them.</p>
+    <div class="dialog-actions"><button type="button" id="cloud-create" class="button primary">Create backup</button><button type="button" id="cloud-save" class="button">Back up changes</button></div>
+    <label for="cloud-recovery">Recovery code (keep this secret)</label>
+    <textarea id="cloud-recovery" rows="3" spellcheck="false" autocomplete="off" placeholder="Paste your recovery code here to restore on another device"></textarea>
+    <div class="dialog-actions"><button id="cloud-copy" type="button" class="button">Copy my code</button><button id="cloud-restore" type="button" class="button">Restore from code</button></div>
+    <div class="dialog-actions"><button id="cloud-disconnect" type="button" class="text-action">Disconnect this device</button></div>
+    <p>Store the recovery code somewhere safe. If it is lost, your cloud backup cannot be recovered. Never post it publicly or share it with anyone.</p>
   </dialog>
 </body>
 </html>

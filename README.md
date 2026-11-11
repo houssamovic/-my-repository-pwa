@@ -1,38 +1,41 @@
-# Repository: Cloudflare Pages edition
+# Repository · Cloudflare Pages PWA
 
-Minimal installed web app for saving shared links from Android. Migrated from Repository v1.5. Same screens and PWA share-target, with a Cloudflare Pages Function for public-page metadata.
+Minimalist link repository with Android Share Target, editable share receipt, direct source opening, topic classification and optional **end-to-end encrypted cloud backup**.
 
-## Deployment (GitHub → Cloudflare Pages)
+Production URL: <https://my-repository-pwa.pages.dev/>. GitHub source: `houssamovic/-my-repository-pwa`.
 
-1. Source code is already committed to **`houssamovic/-my-repository-pwa`** on the `main` branch. Do not upload another ZIP.
-2. In Cloudflare, navigate to **Workers & Pages → Create application → Pages → Connect to Git** (or Pages → Import existing Git repository if displayed). Authorize GitHub, select your new repository, and choose the production branch `main`.
-3. Build configuration: **Framework: None**, **Build command: `exit 0`**, **Build output directory: `site`**. Do not specify `functions` as the build directory.
-4. Deploy. Confirm the deployed `https://<project>.pages.dev/` page loads. Test `/check.html` and `/api/metadata?url=https%3A%2F%2Fwww.wikipedia.org%2F` (the latter may vary by source access).
-5. Export all saved links on your installed Netlify Repository first. Install the new Cloudflare URL as a separate PWA from Chrome and import your backup. The new domain has separate local storage.
-6. Test Android Share → Repository and open/edit saved links **before** considering removal of the Netlify site.
+## Current scope
 
-**Important:** Choose **Connect to Git**, not **Direct Upload**. Cloudflare currently does not allow upgrading a Direct Upload Pages project to Git integration later.
+- Android installed PWA appears in Share menu. Share URLs, optionally edit title, description, category or note, and return with Android Back.
+- Links are always saved **locally first** in browser storage. Keep exporting JSON backups if cloud backup is not enabled.
+- Public webpage title/description extracted through `/api/metadata`. Some Instagram/X/Facebook items expose no usable content to third parties. No caption or video understanding is invented.
+- Deterministic topic classifier (`site/classifier.js`) considers genuine title, description and human-readable URL path, and creates new category tiles only on confident matches. User-chosen categories remain authoritative. No AI API fees.
+- Optional encrypted backup (`/api/vault/...`): AES-GCM in browser, randomly generated secret recovery code, hash-only authorization token in database, conflict detection; while connected and online, snapshots auto-upload after saving. This is **not live multi-device synchronization**. A second device must explicitly **Restore from code**, and concurrent changes can trigger a conflict instead of silently overwriting. Keep the code secure: there is no password reset.
 
-**Current migration status:** GitHub source import complete. Cloudflare Pages account connection and live deployment remain to be performed. Existing Netlify site is not changed.
+## Deployment
 
-## Architecture
+The repository is connected to Cloudflare Pages with framework None and output directory `site`, with `/functions` alongside `/site`. New GitHub commits deploy automatically. Keep `site/manifest.webmanifest` `id`, `start_url`, `scope`, and `share_target` stable so PWA upgrades don't need reinstall.
 
-- `site/`: website and Android PWA files (v1.5 user experience)
-- `site/_routes.json`: invokes Cloudflare Functions only on `/api/*`, keeping ordinary static requests outside the Functions allowance
-- `functions/api/metadata.js`: server-side best-effort metadata extraction from public HTML; no AI, no private social login, no guaranteed Instagram/X content access
-- `site/app.js` and `site/share-receiver.js`: metadata endpoint updated from Netlify to `/api/metadata`
-- Local storage keys, app manifest identity and share destination unchanged relative to v1.5 (on a **new origin**, separate installation is unavoidable)
+Cloud storage is **disabled safely** until configured in Cloudflare. To enable:
 
-## Updating
+1. Cloudflare Dashboard → **Storage & databases → D1 SQL Database** → Create database named `repository-backups` (Free plan where eligible).
+2. Open the new database's **Console** and execute the SQL from [`database/schema.sql`](database/schema.sql). No credentials or personal saved links go in GitHub.
+3. Cloudflare → **Workers & Pages → your Pages project → Settings → Bindings → Add → D1 database**. Binding variable name: **`REPOSITORY_DB`**, select database `repository-backups`. Set production (and preview separately only if needed).
+4. **Redeploy** the most recent Git commit in Cloudflare Pages. Confirm `/api/vault/status` shows `{"available":true}`. If false, check the binding and schema.
+5. Open Repository → **Cloud backup** → **Create backup**. Save the one-time recovery code in a secure password manager. No source links or decryption key are stored unencrypted in Cloudflare's database.
+6. On another device: install/open the same Pages URL, Cloud backup → paste code → Restore. Export existing links before accepting replacement of local data.
 
-Push changes to `main` to trigger Cloudflare production deployment. Use another Git branch for previews. Keep the PWA manifest identity and `share_target.action` stable to avoid Android app registration changes. The service worker checks for updated versions at launches. A visible update banner has **not** yet been implemented.
+**Security and operations:** This is a personal MVP, not a production-ready multi-user service. Cloud vault creation is publicly accessible if D1 is enabled. Before promoting it publicly, add Cloudflare WAF/rate limiting/Turnstile to protect accountless vault creation from abuse, monitor D1 quotas, and adopt a production identity system if user accounts, reset/recovery, and reliable multi-device merges are required. No secrets should be committed to the repository. The backup recovery code is the only way to decrypt an accountless vault; possession grants access. Auto-backup is best effort while the app is open and online, not guaranteed when Android suspends the share activity. Use local Export backups periodically.
 
-## Data protection
+## Testing
 
-Links are **still saved in browser local storage on each device**, not in Cloudflare D1. Do not uninstall the old PWA before exporting a backup. The website is public, but local saved links are not published to a shared database. Later cloud synchronization would require account authentication, private data isolation, and a migration strategy, not just a D1 table.
+Run `node --test tests/*.test.mjs` (Node 20+). Tests cover metadata extraction, classification accuracy safeguards, bearer authorization, optimistic concurrency, encryption and recovery.
 
-## Known limitations
+## File layout
 
-- Some social networks block metadata extraction. URL capture still works, but automatic descriptions may be incomplete.
-- An installed PWA opens its receiving page when selected from Android's share sheet; browsers do not guarantee automatic return to the previous app.
-- Server-side metadata previews are best-effort and subject to rate limits or content restrictions.
+- `site/`: static PWA and browser-only encryption, category classification, local storage
+- `functions/api/metadata.js`: best-effort public page metadata (bounded fetch, SSRF checks)
+- `functions/api/vault/`: encrypted backup API, Cloudflare Pages Functions
+- `database/schema.sql`: D1 schema
+- `site/_routes.json`: only `/api/*` invokes Pages Functions
+- `tests/`: local test suite
