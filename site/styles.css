@@ -108,3 +108,6 @@ dialog{border:none;border-radius:13px;background:#fff;box-shadow:0 24px 85px #1c
   .project-brief{padding:16px}
 }
 @media(max-width:360px){.project-grid{grid-template-columns:1fr}}
+
+/* Allow the editor to scroll safely when the keyboard opens on Android. */
+.editor-dialog{max-height:calc(100dvh - 28px);overflow-y:auto;overscroll-behavior:contain}
