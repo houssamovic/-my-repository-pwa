@@ -105,6 +105,10 @@ No new Cloudflare binding is required. Verify the Pages deployment for the merge
 
 Open a project with a preparation brief and choose **Add to checklist** on a research question or a source-backed finding, tool or step. The task keeps its research suggestion or original source link when available. Edit the task wording, mark it complete, or remove it from the project’s checklist. A saved task keeps its edits and progress when the brief is regenerated. Tasks stay in the project and are included in the existing JSON and encrypted cloud backups.
 
+## Manual checklist tasks (v1.17)
+
+Choose **+ Add task** in any project’s preparation checklist, including an empty project with no brief or links. Manual and brief-derived tasks share the same editing, completion, removal, and backup behavior. Adding a manual task does not call AI.
+
 ## Current scope
 
 - Android installed PWA appears in Share menu. Share URLs, optionally edit title, description, category or note, and return with Android Back.

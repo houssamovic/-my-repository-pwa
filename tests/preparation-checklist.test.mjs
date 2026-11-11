@@ -43,3 +43,12 @@ test('older backups load an empty checklist and malformed tasks are ignored',()=
   assert.equal(restored[1].title.length,350);
   assert.equal(restored[1].sourceId,'');
 });
+
+test('manual tasks work in projects without briefs or saved links and round-trip in backups',()=>{
+  const task={id:'manual-task',title:'Buy a drain pan',done:false,detail:'',origin:'',sourceId:''};
+  const backup=JSON.parse(JSON.stringify([{...project,linkIds:[],brief:null,checklist:[task]}]));
+  const restored=model.sanitize(backup,[])[0];
+  assert.equal(restored.brief,null);
+  assert.equal(restored.linkIds.length,0);
+  assert.deepEqual({...restored.checklist[0]},task);
+});
